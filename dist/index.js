@@ -8,6 +8,7 @@ import * as os from "os";
 import App from "./app.js";
 import { setCredentials } from "./api.js";
 // Load .env from home dir or current dir
+process.env.DOTENV_CONFIG_QUIET = "true";
 const homeEnv = path.join(os.homedir(), ".trello-cli.env");
 if (fs.existsSync(homeEnv)) {
     dotenv.config({ path: homeEnv });
