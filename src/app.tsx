@@ -99,7 +99,7 @@ function ErrorBanner({ msg, detail }: { msg: string; detail?: string }) {
 function SectionTitle({ label }: { label: string }) {
   return (
     <Box flexDirection="column" marginBottom={1}>
-      <Text color="gray">{label}</Text>
+      <Text color="green">{label}</Text>
       <Text color="blue">{"-".repeat(Math.max(3, label.length))}</Text>
     </Box>
   );

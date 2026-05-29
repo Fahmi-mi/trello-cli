@@ -39,7 +39,7 @@ function ErrorBanner({ msg, detail }) {
     return (_jsxs(Box, { flexDirection: "column", marginBottom: 1, children: [_jsx(Text, { backgroundColor: "red", color: "white", children: " ERROR: " + msg + " " }), detail ? _jsx(Text, { color: "gray", children: detail }) : null] }));
 }
 function SectionTitle({ label }) {
-    return (_jsxs(Box, { flexDirection: "column", marginBottom: 1, children: [_jsx(Text, { color: "gray", children: label }), _jsx(Text, { color: "blue", children: "-".repeat(Math.max(3, label.length)) })] }));
+    return (_jsxs(Box, { flexDirection: "column", marginBottom: 1, children: [_jsx(Text, { color: "green", children: label }), _jsx(Text, { color: "blue", children: "-".repeat(Math.max(3, label.length)) })] }));
 }
 function SelectIndicator({ isSelected }) {
     return _jsx(Text, { children: isSelected ? " " : " " });
