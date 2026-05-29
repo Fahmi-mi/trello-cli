@@ -1,13 +1,31 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useState, useEffect } from "react";
-import { Box, Text, useInput, useApp } from "ink";
+import { useEffect, useState } from "react";
+import { Box, Text, useApp, useInput, useStdout } from "ink";
 import SelectInput from "ink-select-input";
 import TextInput from "ink-text-input";
 import Spinner from "ink-spinner";
 import * as api from "./api.js";
-// ── helpers ──────────────────────────────────────────────────────────────────
-function Header({ title }) {
-    return (_jsxs(Box, { flexDirection: "column", marginBottom: 1, children: [_jsx(Box, { children: _jsx(Text, { bold: true, color: "blue", children: "-".repeat(50) }) }), _jsxs(Text, { bold: true, color: "cyan", children: [" Trello CLI ", _jsxs(Text, { color: "white", children: [" ", title] })] }), _jsx(Box, { children: _jsx(Text, { bold: true, color: "blue", children: "-".repeat(50) }) })] }));
+// ── helpers ─────────────────────────────────────────────────────────────────-
+function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
+function truncate(text, width) {
+    if (width <= 0)
+        return "";
+    if (text.length <= width)
+        return text;
+    if (width <= 3)
+        return text.slice(0, width);
+    return text.slice(0, width - 3) + "...";
+}
+function HeaderBar({ title, width }) {
+    const line = "-".repeat(Math.max(0, width));
+    return (_jsxs(Box, { flexDirection: "column", width: width, children: [_jsx(Text, { color: "blue", children: line }), _jsxs(Box, { children: [_jsx(Text, { color: "cyan", bold: true, children: "Trello CLI" }), _jsxs(Text, { color: "white", children: [" ", title] })] }), _jsx(Text, { color: "blue", children: line })] }));
+}
+function FooterBar({ hints, width }) {
+    const line = "-".repeat(Math.max(0, width));
+    const text = truncate(hints.join("  "), width);
+    return (_jsxs(Box, { flexDirection: "column", width: width, children: [_jsx(Text, { color: "blue", children: line }), _jsx(Text, { color: "gray", children: text })] }));
 }
 function Loading({ label }) {
     return (_jsxs(Box, { children: [_jsx(Text, { color: "green", children: _jsx(Spinner, { type: "dots" }) }), _jsxs(Text, { children: [" ", label] })] }));
@@ -20,18 +38,38 @@ function ErrorBanner({ msg, detail }) {
         return null;
     return (_jsxs(Box, { flexDirection: "column", marginBottom: 1, children: [_jsx(Text, { backgroundColor: "red", color: "white", children: " ERROR: " + msg + " " }), detail ? _jsx(Text, { color: "gray", children: detail }) : null] }));
 }
-// ── TextInputScreen ───────────────────────────────────────────────────────────
-function TextInputScreen({ title, prompt, onSubmit, onBack, initialValue = "", error, errorDetail, }) {
+// ── Input panels ─────────────────────────────────────────────────------------
+function TextInputPanel({ prompt, onSubmit, initialValue = "", }) {
     const [value, setValue] = useState(initialValue);
-    useInput((input, key) => {
-        if (key.escape)
-            onBack();
-    });
-    return (_jsxs(Box, { flexDirection: "column", children: [_jsx(Header, { title: title }), _jsx(ErrorBanner, { msg: error || "", detail: errorDetail }), _jsx(Text, { color: "yellow", children: prompt }), _jsxs(Box, { marginTop: 1, children: [_jsx(Text, { color: "gray", children: "> " }), _jsx(TextInput, { value: value, onChange: setValue, onSubmit: onSubmit })] }), _jsx(Box, { marginTop: 1, children: _jsx(Text, { color: "gray", children: "[ESC] back" }) })] }));
+    return (_jsxs(Box, { flexDirection: "column", children: [_jsx(Text, { color: "yellow", children: prompt }), _jsxs(Box, { marginTop: 1, children: [_jsx(Text, { color: "gray", children: "> " }), _jsx(TextInput, { value: value, onChange: setValue, onSubmit: onSubmit })] })] }));
+}
+function ListColumn({ list, cards, selectedIndex, width, height, isActive, }) {
+    const header = truncate(`${list.name} (${cards.length})`, width);
+    const items = [...cards.map((card) => card.name), "Buat card baru"];
+    const viewHeight = Math.max(1, height - 1);
+    const maxStart = Math.max(0, items.length - viewHeight);
+    const start = clamp(selectedIndex - Math.floor(viewHeight / 2), 0, maxStart);
+    const visible = items.slice(start, start + viewHeight);
+    return (_jsxs(Box, { flexDirection: "column", width: width, children: [_jsx(Text, { color: isActive ? "cyan" : "gray", children: header }), visible.length === 0 ? (_jsx(Text, { color: "gray", children: "(Kosong)" })) : (visible.map((label, idx) => {
+                const realIndex = start + idx;
+                const isSelected = isActive && realIndex === selectedIndex;
+                const isAction = realIndex === items.length - 1;
+                const text = truncate(label, Math.max(1, width - 2));
+                return (_jsx(Box, { children: _jsx(Text, { backgroundColor: isSelected ? "cyan" : undefined, color: isSelected ? "black" : isAction ? "cyan" : "white", children: ` ${text}` }) }, `${list.id}-${realIndex}`));
+            }))] }));
+}
+function CardDetailPanel({ card, width, }) {
+    if (!card) {
+        return _jsx(Text, { color: "gray", children: "Pilih card untuk melihat detail." });
+    }
+    return (_jsxs(Box, { flexDirection: "column", width: width, children: [_jsx(Text, { color: "cyan", bold: true, children: "Detail Card" }), _jsx(Text, { color: "white", bold: true, children: truncate(card.name, width) }), card.desc ? (_jsx(Text, { color: "gray", children: truncate(card.desc, width) })) : (_jsx(Text, { color: "gray", children: "(Tanpa deskripsi)" })), card.due ? (_jsxs(Text, { color: card.dueComplete ? "green" : "red", children: ["Due: ", new Date(card.due).toLocaleDateString("id"), card.dueComplete ? " (done)" : ""] })) : (_jsx(Text, { color: "gray", children: "Due: -" })), _jsx(Text, { color: "blue", children: card.shortUrl })] }));
 }
 // ── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
     const { exit } = useApp();
+    const { stdout } = useStdout();
+    const columns = stdout?.columns ?? 80;
+    const rows = stdout?.rows ?? 24;
     const [screen, setScreen] = useState("boards");
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState("");
@@ -40,13 +78,15 @@ export default function App() {
     const [errorDetail, setErrorDetail] = useState("");
     const [boards, setBoards] = useState([]);
     const [lists, setLists] = useState([]);
-    const [cards, setCards] = useState([]);
+    const [cardsByList, setCardsByList] = useState({});
     const [checklists, setChecklists] = useState([]);
     const [comments, setComments] = useState([]);
     const [selectedBoard, setSelectedBoard] = useState(null);
     const [selectedList, setSelectedList] = useState(null);
     const [selectedCard, setSelectedCard] = useState(null);
     const [selectedChecklist, setSelectedChecklist] = useState(null);
+    const [listIndex, setListIndex] = useState(0);
+    const [listCardIndex, setListCardIndex] = useState({});
     const flash = (msg, color = "green") => {
         setStatus(msg);
         setStatusColor(color);
@@ -80,11 +120,92 @@ export default function App() {
             });
         }
     }, [screen]);
+    useEffect(() => {
+        if (lists.length === 0) {
+            setSelectedList(null);
+            setListIndex(0);
+            return;
+        }
+        const nextIndex = clamp(listIndex, 0, lists.length - 1);
+        setListIndex(nextIndex);
+        setSelectedList(lists[nextIndex]);
+    }, [lists, listIndex]);
+    useEffect(() => {
+        if (lists.length === 0)
+            return;
+        setListIndex(0);
+        setListCardIndex((prev) => {
+            const next = {};
+            lists.forEach((list) => {
+                next[list.id] = prev[list.id] ?? 0;
+            });
+            return next;
+        });
+    }, [lists]);
+    useEffect(() => {
+        if (lists.length === 0)
+            return;
+        setListCardIndex((prev) => {
+            const next = { ...prev };
+            lists.forEach((list) => {
+                const maxIndex = cardsByList[list.id]?.length ?? 0;
+                const current = next[list.id] ?? 0;
+                next[list.id] = clamp(current, 0, maxIndex);
+            });
+            return next;
+        });
+    }, [cardsByList, lists]);
     useInput((_input, key) => {
         if (key.escape)
             handleBack();
         if (_input === "q")
             exit();
+        if (screen === "lists") {
+            if (key.leftArrow) {
+                setListIndex((current) => clamp(current - 1, 0, lists.length - 1));
+            }
+            if (key.rightArrow) {
+                setListIndex((current) => clamp(current + 1, 0, lists.length - 1));
+            }
+            if (key.upArrow) {
+                const list = lists[listIndex];
+                if (!list)
+                    return;
+                const maxIndex = cardsByList[list.id]?.length ?? 0;
+                setListCardIndex((prev) => {
+                    const current = prev[list.id] ?? 0;
+                    const next = clamp(current - 1, 0, maxIndex);
+                    return { ...prev, [list.id]: next };
+                });
+            }
+            if (key.downArrow) {
+                const list = lists[listIndex];
+                if (!list)
+                    return;
+                const maxIndex = cardsByList[list.id]?.length ?? 0;
+                setListCardIndex((prev) => {
+                    const current = prev[list.id] ?? 0;
+                    const next = clamp(current + 1, 0, maxIndex);
+                    return { ...prev, [list.id]: next };
+                });
+            }
+            if (key.return) {
+                const list = lists[listIndex];
+                if (!list)
+                    return;
+                const listCards = cardsByList[list.id] ?? [];
+                const index = listCardIndex[list.id] ?? 0;
+                if (index >= listCards.length) {
+                    setSelectedList(list);
+                    setScreen("create_card");
+                }
+                else {
+                    setSelectedList(list);
+                    setSelectedCard(listCards[index]);
+                    setScreen("card_detail");
+                }
+            }
+        }
     });
     function handleBack() {
         clearError();
@@ -92,10 +213,8 @@ export default function App() {
             return exit();
         if (screen === "lists")
             setScreen("boards");
-        else if (screen === "cards")
-            setScreen("lists");
         else if (screen === "card_detail")
-            setScreen("cards");
+            setScreen("lists");
         else if (screen === "checklists")
             setScreen("card_detail");
         else if (screen === "add_checklist")
@@ -107,7 +226,7 @@ export default function App() {
         else if (screen === "add_comment")
             setScreen("comments");
         else if (screen === "create_card")
-            setScreen("cards");
+            setScreen("lists");
         else if (screen === "edit_card")
             setScreen("card_detail");
         else if (screen === "move_card")
@@ -126,7 +245,7 @@ export default function App() {
     function requireSelectedCard() {
         if (!selectedCard) {
             showError("Card belum dipilih.");
-            setScreen("cards");
+            setScreen("lists");
             return null;
         }
         return selectedCard;
@@ -146,7 +265,16 @@ export default function App() {
         startLoading();
         try {
             const ls = await api.getLists(board.id);
+            const cardsByListEntries = await Promise.all(ls.map(async (list) => ({
+                listId: list.id,
+                cards: await api.getCards(list.id),
+            })));
+            const nextCardsByList = {};
+            cardsByListEntries.forEach((entry) => {
+                nextCardsByList[entry.listId] = entry.cards;
+            });
             setLists(ls);
+            setCardsByList(nextCardsByList);
             setLoading(false);
             setScreen("lists");
         }
@@ -156,38 +284,14 @@ export default function App() {
         }
     }
     // ── List select ──────────────────────────────────────────────────────────────
-    async function handleListSelect(item) {
-        if (item.value === "back")
-            return handleBack();
-        const list = item.value;
-        setSelectedList(list);
-        startLoading();
-        try {
-            const cs = await api.getCards(list.id);
-            setCards(cs);
-            setLoading(false);
-            setScreen("cards");
-        }
-        catch (err) {
-            showError("Gagal load cards pada list ini.", err?.message || "");
-            setLoading(false);
-        }
-    }
-    // ── Card select ──────────────────────────────────────────────────────────────
-    async function handleCardSelect(item) {
-        if (item.value === "back")
-            return handleBack();
-        if (item.value === "create")
-            return setScreen("create_card");
-        const card = item.value;
-        setSelectedCard(card);
-        setScreen("card_detail");
+    async function refreshListCards(listId) {
+        const cs = await api.getCards(listId);
+        setCardsByList((prev) => ({ ...prev, [listId]: cs }));
+        return cs;
     }
     // ── Card detail actions ──────────────────────────────────────────────────────
     async function handleCardAction(item) {
         const action = item.value;
-        if (action === "back")
-            return handleBack();
         if (action === "checklists") {
             const card = requireSelectedCard();
             if (!card)
@@ -237,11 +341,10 @@ export default function App() {
         startLoading();
         try {
             await api.createCard(list.id, name.trim());
-            const cs = await api.getCards(list.id);
-            setCards(cs);
+            await refreshListCards(list.id);
             setLoading(false);
             flash(`Card "${name}" dibuat.`);
-            setScreen("cards");
+            setScreen("lists");
         }
         catch (err) {
             showError("Gagal membuat card baru.", err?.message || "");
@@ -259,6 +362,7 @@ export default function App() {
         try {
             const updated = await api.updateCard(card.id, { name: newName.trim() });
             setSelectedCard(updated);
+            await refreshListCards(updated.idList);
             setLoading(false);
             flash("Card diupdate.");
             setScreen("card_detail");
@@ -270,8 +374,6 @@ export default function App() {
     }
     // ── Move card ────────────────────────────────────────────────────────────────
     async function handleMoveCard(item) {
-        if (item.value === "back")
-            return handleBack();
         const targetList = item.value;
         const card = requireSelectedCard();
         const list = requireSelectedList();
@@ -279,10 +381,11 @@ export default function App() {
             return;
         startLoading();
         try {
+            const sourceListId = card.idList;
             const updated = await api.updateCard(card.id, { idList: targetList.id });
             setSelectedCard(updated);
-            const cs = await api.getCards(list.id);
-            setCards(cs);
+            await refreshListCards(sourceListId);
+            await refreshListCards(targetList.id);
             setLoading(false);
             flash(`Card dipindah ke "${targetList.name}".`);
             setScreen("card_detail");
@@ -294,8 +397,6 @@ export default function App() {
     }
     // ── Checklist actions ────────────────────────────────────────────────────────
     async function handleChecklistAction(item) {
-        if (item.value === "back")
-            return handleBack();
         if (item.value === "add_checklist")
             return setScreen("add_checklist");
         const cl = item.value;
@@ -323,23 +424,6 @@ export default function App() {
         }
     }
     async function handleCheckItemAction(item) {
-        if (item.value === "back") {
-            const card = requireSelectedCard();
-            if (!card)
-                return;
-            startLoading();
-            try {
-                const cls = await api.getChecklists(card.id);
-                setChecklists(cls);
-                setLoading(false);
-                return setScreen("checklists");
-            }
-            catch (err) {
-                showError("Gagal load checklists.", err?.message || "");
-                setLoading(false);
-                return;
-            }
-        }
         if (item.value === "add")
             return setScreen("add_checkitem");
         const ci = item.value;
@@ -409,61 +493,111 @@ export default function App() {
             setLoading(false);
         }
     }
-    // ── Render ───────────────────────────────────────────────────────────────────
-    if (loading)
-        return _jsx(Loading, { label: "Loading..." });
-    // BOARDS
-    if (screen === "boards") {
+    // ── Render ─────────────────────────────────────────────────-----------------
+    const width = Math.max(40, columns);
+    const height = Math.max(10, rows);
+    const headerHeight = 3;
+    const footerHeight = 2;
+    const contentHeight = Math.max(1, height - headerHeight - footerHeight);
+    const contentWidth = Math.max(20, width - 4);
+    const headerTitle = (() => {
+        switch (screen) {
+            case "boards":
+                return "Boards";
+            case "lists":
+                return selectedBoard ? `Board: ${selectedBoard.name}` : "Lists";
+            case "card_detail":
+                return selectedCard ? `Card: ${selectedCard.name}` : "Card";
+            case "create_card":
+                return "Buat Card Baru";
+            case "edit_card":
+                return "Edit Card";
+            case "move_card":
+                return "Pindahkan Card";
+            case "checklists":
+                return "Checklists";
+            case "add_checklist":
+                return "Buat Checklist";
+            case "add_checkitem":
+                return "Checklist Items";
+            case "comments":
+                return "Komentar";
+            case "add_comment":
+                return "Tambah Komentar";
+            default:
+                return "Trello CLI";
+        }
+    })();
+    const footerHints = (() => {
+        switch (screen) {
+            case "boards":
+                return ["Up/Down: navigasi", "Enter: pilih", "Q: quit"];
+            case "lists":
+                return [
+                    "Left/Right: list",
+                    "Up/Down: card",
+                    "Enter: buka",
+                    "Esc: back",
+                    "Q: quit",
+                ];
+            case "card_detail":
+            case "checklists":
+            case "comments":
+                return ["Up/Down: navigasi", "Enter: pilih", "Esc: back", "Q: quit"];
+            case "create_card":
+            case "edit_card":
+            case "add_checklist":
+            case "add_checkitem":
+            case "add_comment":
+                return ["Enter: simpan", "Esc: back", "Q: quit"];
+            case "move_card":
+                return ["Up/Down: pilih", "Enter: pindah", "Esc: back", "Q: quit"];
+            default:
+                return ["Q: quit"];
+        }
+    })();
+    let content = null;
+    if (loading) {
+        content = _jsx(Loading, { label: "Loading..." });
+    }
+    else if (screen === "boards") {
         const items = boards.map((b) => ({ label: b.name, value: b, key: b.id }));
-        return (_jsxs(Box, { flexDirection: "column", children: [_jsx(Header, { title: "Pilih Board" }), _jsx(ErrorBanner, { msg: error, detail: errorDetail }), _jsx(SelectInput, { items: items, onSelect: handleBoardSelect }), _jsx(Box, { marginTop: 1, children: _jsx(Text, { color: "gray", children: "[Q] quit" }) }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
+        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SelectInput, { items: items, onSelect: handleBoardSelect }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
     }
-    // LISTS
-    if (screen === "lists") {
-        const items = [
-            ...lists.map((l) => ({
-                label: l.name,
-                value: l,
-                key: l.id,
-            })),
-            { label: "Back", value: "back", key: "back" },
-        ];
-        return (_jsxs(Box, { flexDirection: "column", children: [_jsx(Header, { title: `${selectedBoard?.name} > Lists` }), _jsx(ErrorBanner, { msg: error, detail: errorDetail }), _jsx(SelectInput, { items: items, onSelect: handleListSelect }), _jsx(Box, { marginTop: 1, children: _jsx(Text, { color: "gray", children: "[ESC] back" }) })] }));
+    else if (screen === "lists") {
+        const columnWidth = Math.max(18, Math.floor((contentWidth - 4) / 3));
+        const columnGap = 2;
+        const maxVisible = Math.max(1, Math.floor((contentWidth + columnGap) / (columnWidth + columnGap)));
+        const maxStart = Math.max(0, lists.length - maxVisible);
+        const start = clamp(listIndex - Math.floor(maxVisible / 2), 0, maxStart);
+        const visibleLists = lists.slice(start, start + maxVisible);
+        const columnHeight = Math.max(3, contentHeight - 1);
+        content = (_jsx(Box, { flexDirection: "row", children: visibleLists.map((list, idx) => {
+                const realIndex = start + idx;
+                const isActive = realIndex === listIndex;
+                const listCards = cardsByList[list.id] ?? [];
+                const selectedIndex = listCardIndex[list.id] ?? 0;
+                return (_jsx(Box, { flexDirection: "column", width: columnWidth, marginRight: idx === visibleLists.length - 1 ? 0 : columnGap, children: _jsx(ListColumn, { list: list, cards: listCards, selectedIndex: selectedIndex, width: columnWidth, height: columnHeight, isActive: isActive }) }, list.id));
+            }) }));
     }
-    // CARDS
-    if (screen === "cards") {
-        const items = [
-            ...cards.map((c) => ({
-                label: c.name +
-                    (c.due ? ` (Due ${new Date(c.due).toLocaleDateString("id")})` : ""),
-                value: c,
-                key: c.id,
-            })),
-            { label: "Buat card baru", value: "create", key: "create" },
-            { label: "Back", value: "back", key: "back" },
-        ];
-        return (_jsxs(Box, { flexDirection: "column", children: [_jsx(Header, { title: `${selectedList?.name} > Cards` }), _jsx(ErrorBanner, { msg: error, detail: errorDetail }), cards.length === 0 && (_jsx(Text, { color: "gray", children: "Belum ada card di list ini." })), _jsx(SelectInput, { items: items, onSelect: handleCardSelect }), _jsx(Box, { marginTop: 1, children: _jsx(Text, { color: "gray", children: "[ESC] back" }) }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
-    }
-    // CARD DETAIL
-    if (screen === "card_detail" && selectedCard) {
+    else if (screen === "card_detail" && selectedCard) {
         const actions = [
             { label: "Checklists", value: "checklists" },
             { label: "Komentar", value: "comments" },
             { label: "Edit nama", value: "edit" },
             { label: "Pindahkan", value: "move" },
-            { label: "Back", value: "back" },
         ];
-        return (_jsxs(Box, { flexDirection: "column", children: [_jsx(Header, { title: "Detail Card" }), _jsx(ErrorBanner, { msg: error, detail: errorDetail }), _jsxs(Box, { marginBottom: 1, flexDirection: "column", children: [_jsx(Text, { bold: true, color: "yellow", children: selectedCard.name }), selectedCard.desc && _jsx(Text, { color: "gray", children: selectedCard.desc }), selectedCard.due && (_jsxs(Text, { color: selectedCard.dueComplete ? "green" : "red", children: ["Due: ", new Date(selectedCard.due).toLocaleDateString("id"), selectedCard.dueComplete ? " (done)" : ""] })), _jsx(Text, { color: "blue", children: selectedCard.shortUrl })] }), _jsx(SelectInput, { items: actions, onSelect: handleCardAction }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
+        const listWidth = Math.max(20, Math.floor(contentWidth * 0.45));
+        const detailWidth = Math.max(20, contentWidth - listWidth - 2);
+        content = (_jsxs(Box, { flexDirection: "row", children: [_jsxs(Box, { flexDirection: "column", width: listWidth, children: [_jsx(Text, { color: "gray", children: "Aksi" }), _jsx(SelectInput, { items: actions, onSelect: handleCardAction }), _jsx(StatusMsg, { msg: status, color: statusColor })] }), _jsx(Box, { flexDirection: "column", width: detailWidth, marginLeft: 2, children: _jsx(CardDetailPanel, { card: selectedCard, width: detailWidth }) })] }));
     }
-    // CREATE CARD
-    if (screen === "create_card") {
-        return (_jsx(TextInputScreen, { title: "Buat Card Baru", prompt: `Nama card baru di "${selectedList?.name}":`, onSubmit: handleCreateCard, onBack: handleBack, error: error, errorDetail: errorDetail }));
+    else if (screen === "create_card") {
+        content = (_jsx(TextInputPanel, { prompt: `Nama card baru di "${selectedList?.name}":`, onSubmit: handleCreateCard }));
     }
-    // EDIT CARD
-    if (screen === "edit_card" && selectedCard) {
-        return (_jsx(TextInputScreen, { title: "Edit Card", prompt: "Nama baru:", onSubmit: handleEditCard, onBack: handleBack, initialValue: selectedCard.name, error: error, errorDetail: errorDetail }));
+    else if (screen === "edit_card" && selectedCard) {
+        content = (_jsx(TextInputPanel, { prompt: "Nama baru:", onSubmit: handleEditCard, initialValue: selectedCard.name }));
     }
-    // MOVE CARD
-    if (screen === "move_card") {
+    else if (screen === "move_card") {
         const items = [
             ...lists
                 .filter((l) => l.id !== selectedCard?.idList)
@@ -472,12 +606,10 @@ export default function App() {
                 value: l,
                 key: l.id,
             })),
-            { label: "Back", value: "back", key: "back" },
         ];
-        return (_jsxs(Box, { flexDirection: "column", children: [_jsx(Header, { title: `Pindahkan "${selectedCard?.name}"` }), _jsx(ErrorBanner, { msg: error, detail: errorDetail }), _jsx(Text, { color: "gray", children: "Pilih list tujuan:" }), _jsx(SelectInput, { items: items, onSelect: handleMoveCard })] }));
+        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(Text, { color: "gray", children: "Pilih list tujuan:" }), _jsx(SelectInput, { items: items, onSelect: handleMoveCard })] }));
     }
-    // CHECKLISTS
-    if (screen === "checklists") {
+    else if (screen === "checklists") {
         const items = [
             ...checklists.map((cl) => {
                 const total = cl.checkItems.length;
@@ -493,16 +625,13 @@ export default function App() {
                 value: "add_checklist",
                 key: "add_checklist",
             },
-            { label: "Back", value: "back", key: "back" },
         ];
-        return (_jsxs(Box, { flexDirection: "column", children: [_jsx(Header, { title: `Checklists > "${selectedCard?.name}"` }), _jsx(ErrorBanner, { msg: error, detail: errorDetail }), checklists.length === 0 && (_jsx(Text, { color: "gray", children: "Belum ada checklist." })), _jsx(SelectInput, { items: items, onSelect: handleChecklistAction }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
+        content = (_jsxs(Box, { flexDirection: "column", children: [checklists.length === 0 && (_jsx(Text, { color: "gray", children: "Belum ada checklist." })), _jsx(SelectInput, { items: items, onSelect: handleChecklistAction }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
     }
-    // ADD CHECKLIST
-    if (screen === "add_checklist") {
-        return (_jsx(TextInputScreen, { title: "Buat Checklist", prompt: "Nama checklist:", onSubmit: handleCreateChecklist, onBack: handleBack, error: error, errorDetail: errorDetail }));
+    else if (screen === "add_checklist") {
+        content = (_jsx(TextInputPanel, { prompt: "Nama checklist:", onSubmit: handleCreateChecklist }));
     }
-    // CHECK ITEMS
-    if (screen === "add_checkitem" && selectedChecklist) {
+    else if (screen === "add_checkitem" && selectedChecklist) {
         const items = [
             ...selectedChecklist.checkItems.map((ci) => ({
                 label: `${ci.state === "complete" ? "[x]" : "[ ]"} ${ci.name}`,
@@ -510,31 +639,25 @@ export default function App() {
                 key: ci.id,
             })),
             { label: "Tambah item", value: "add", key: "add" },
-            { label: "Back", value: "back", key: "back" },
         ];
         const total = selectedChecklist.checkItems.length;
         const done = selectedChecklist.checkItems.filter((i) => i.state === "complete").length;
-        return (_jsxs(Box, { flexDirection: "column", children: [_jsx(Header, { title: `${selectedChecklist.name}  [${done}/${total}]` }), _jsx(ErrorBanner, { msg: error, detail: errorDetail }), _jsx(Text, { color: "gray", children: "Pilih item untuk toggle [x]/[ ], atau tambah baru:" }), _jsx(Box, { marginTop: 1, children: _jsx(SelectInput, { items: items, onSelect: handleCheckItemAction }) }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
+        content = (_jsxs(Box, { flexDirection: "column", children: [_jsxs(Text, { color: "gray", children: [selectedChecklist.name, " [", done, "/", total, "]"] }), _jsx(Text, { color: "gray", children: "Pilih item untuk toggle [x]/[ ], atau tambah baru:" }), _jsx(Box, { marginTop: 1, children: _jsx(SelectInput, { items: items, onSelect: handleCheckItemAction }) }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
     }
-    // ADD CHECK ITEM (text input)
-    if (screen === "add_checkitem" && !selectedChecklist) {
-        return _jsx(Loading, { label: "Loading checklist..." });
+    else if (screen === "add_checkitem" && !selectedChecklist) {
+        content = _jsx(Loading, { label: "Loading checklist..." });
     }
-    // COMMENTS
-    if (screen === "comments") {
-        return (_jsxs(Box, { flexDirection: "column", children: [_jsx(Header, { title: `Komentar > "${selectedCard?.name}"` }), _jsx(ErrorBanner, { msg: error, detail: errorDetail }), comments.length === 0 && _jsx(Text, { color: "gray", children: "Belum ada komentar." }), comments.map((c) => (_jsxs(Box, { flexDirection: "column", marginBottom: 1, children: [_jsx(Text, { color: "cyan", bold: true, children: c.memberCreator.fullName }), _jsx(Text, { color: "gray", children: new Date(c.date).toLocaleString("id") }), _jsx(Text, { children: c.data.text })] }, c.id))), _jsx(Box, { marginTop: 1, flexDirection: "column", children: _jsx(SelectInput, { items: [
-                            { label: "Tambah komentar", value: "add" },
-                            { label: "Back", value: "back" },
-                        ], onSelect: (item) => {
+    else if (screen === "comments") {
+        content = (_jsxs(Box, { flexDirection: "column", children: [comments.length === 0 && _jsx(Text, { color: "gray", children: "Belum ada komentar." }), comments.map((c) => (_jsxs(Box, { flexDirection: "column", marginBottom: 1, children: [_jsx(Text, { color: "cyan", bold: true, children: c.memberCreator.fullName }), _jsx(Text, { color: "gray", children: new Date(c.date).toLocaleString("id") }), _jsx(Text, { children: c.data.text })] }, c.id))), _jsx(Box, { marginTop: 1, flexDirection: "column", children: _jsx(SelectInput, { items: [{ label: "Tambah komentar", value: "add" }], onSelect: (item) => {
                             if (item.value === "add")
                                 setScreen("add_comment");
-                            else
-                                handleBack();
                         } }) }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
     }
-    // ADD COMMENT
-    if (screen === "add_comment") {
-        return (_jsx(TextInputScreen, { title: "Tambah Komentar", prompt: "Tulis komentar:", onSubmit: handleAddComment, onBack: handleBack, error: error, errorDetail: errorDetail }));
+    else if (screen === "add_comment") {
+        content = (_jsx(TextInputPanel, { prompt: "Tulis komentar:", onSubmit: handleAddComment }));
     }
-    return _jsx(Loading, { label: "Loading..." });
+    else {
+        content = _jsx(Loading, { label: "Loading..." });
+    }
+    return (_jsxs(Box, { flexDirection: "column", width: width, height: height, children: [_jsx(HeaderBar, { title: headerTitle, width: width }), _jsxs(Box, { flexDirection: "column", width: width, height: contentHeight, paddingX: 2, paddingY: 1, children: [_jsx(ErrorBanner, { msg: error, detail: errorDetail }), content] }), _jsx(FooterBar, { hints: footerHints, width: width })] }));
 }

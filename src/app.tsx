@@ -1,21 +1,20 @@
-import React, { useState, useEffect } from "react";
-import { Box, Text, useInput, useApp } from "ink";
+import React, { useEffect, useState } from "react";
+import { Box, Text, useApp, useInput, useStdout } from "ink";
 import SelectInput from "ink-select-input";
 import TextInput from "ink-text-input";
 import Spinner from "ink-spinner";
 import * as api from "./api.js";
 import {
   TrelloBoard,
-  TrelloList,
   TrelloCard,
-  TrelloChecklist,
   TrelloCheckItem,
+  TrelloChecklist,
+  TrelloList,
 } from "./api.js";
 
 type Screen =
   | "boards"
   | "lists"
-  | "cards"
   | "card_detail"
   | "create_card"
   | "edit_card"
@@ -26,25 +25,42 @@ type Screen =
   | "comments"
   | "add_comment";
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── helpers ─────────────────────────────────────────────────────────────────-
 
-function Header({ title }: { title: string }) {
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function truncate(text: string, width: number) {
+  if (width <= 0) return "";
+  if (text.length <= width) return text;
+  if (width <= 3) return text.slice(0, width);
+  return text.slice(0, width - 3) + "...";
+}
+
+function HeaderBar({ title, width }: { title: string; width: number }) {
+  const line = "-".repeat(Math.max(0, width));
   return (
-    <Box flexDirection="column" marginBottom={1}>
+    <Box flexDirection="column" width={width}>
+      <Text color="blue">{line}</Text>
       <Box>
-        <Text bold color="blue">
-          {"-".repeat(50)}
+        <Text color="cyan" bold>
+          Trello CLI
         </Text>
-      </Box>
-      <Text bold color="cyan">
-        {" Trello CLI "}
         <Text color="white"> {title}</Text>
-      </Text>
-      <Box>
-        <Text bold color="blue">
-          {"-".repeat(50)}
-        </Text>
       </Box>
+      <Text color="blue">{line}</Text>
+    </Box>
+  );
+}
+
+function FooterBar({ hints, width }: { hints: string[]; width: number }) {
+  const line = "-".repeat(Math.max(0, width));
+  const text = truncate(hints.join("  "), width);
+  return (
+    <Box flexDirection="column" width={width}>
+      <Text color="blue">{line}</Text>
+      <Text color="gray">{text}</Text>
     </Box>
   );
 }
@@ -80,43 +96,112 @@ function ErrorBanner({ msg, detail }: { msg: string; detail?: string }) {
   );
 }
 
-// ── TextInputScreen ───────────────────────────────────────────────────────────
+// ── Input panels ─────────────────────────────────────────────────------------
 
-function TextInputScreen({
-  title,
+function TextInputPanel({
   prompt,
   onSubmit,
-  onBack,
   initialValue = "",
-  error,
-  errorDetail,
 }: {
-  title: string;
   prompt: string;
   onSubmit: (val: string) => void;
-  onBack: () => void;
   initialValue?: string;
-  error?: string;
-  errorDetail?: string;
 }) {
   const [value, setValue] = useState(initialValue);
 
-  useInput((input, key) => {
-    if (key.escape) onBack();
-  });
-
   return (
     <Box flexDirection="column">
-      <Header title={title} />
-      <ErrorBanner msg={error || ""} detail={errorDetail} />
       <Text color="yellow">{prompt}</Text>
       <Box marginTop={1}>
         <Text color="gray">{"> "}</Text>
         <TextInput value={value} onChange={setValue} onSubmit={onSubmit} />
       </Box>
-      <Box marginTop={1}>
-        <Text color="gray">[ESC] back</Text>
-      </Box>
+    </Box>
+  );
+}
+
+function ListColumn({
+  list,
+  cards,
+  selectedIndex,
+  width,
+  height,
+  isActive,
+}: {
+  list: TrelloList;
+  cards: TrelloCard[];
+  selectedIndex: number;
+  width: number;
+  height: number;
+  isActive: boolean;
+}) {
+  const header = truncate(`${list.name} (${cards.length})`, width);
+  const items = [...cards.map((card) => card.name), "Buat card baru"];
+  const viewHeight = Math.max(1, height - 1);
+  const maxStart = Math.max(0, items.length - viewHeight);
+  const start = clamp(selectedIndex - Math.floor(viewHeight / 2), 0, maxStart);
+  const visible = items.slice(start, start + viewHeight);
+
+  return (
+    <Box flexDirection="column" width={width}>
+      <Text color={isActive ? "cyan" : "gray"}>{header}</Text>
+      {visible.length === 0 ? (
+        <Text color="gray">(Kosong)</Text>
+      ) : (
+        visible.map((label, idx) => {
+          const realIndex = start + idx;
+          const isSelected = isActive && realIndex === selectedIndex;
+          const isAction = realIndex === items.length - 1;
+          const text = truncate(label, Math.max(1, width - 2));
+          return (
+            <Box key={`${list.id}-${realIndex}`}>
+              <Text
+                backgroundColor={isSelected ? "cyan" : undefined}
+                color={isSelected ? "black" : isAction ? "cyan" : "white"}
+              >
+                {` ${text}`}
+              </Text>
+            </Box>
+          );
+        })
+      )}
+    </Box>
+  );
+}
+
+function CardDetailPanel({
+  card,
+  width,
+}: {
+  card: TrelloCard | null;
+  width: number;
+}) {
+  if (!card) {
+    return <Text color="gray">Pilih card untuk melihat detail.</Text>;
+  }
+
+  return (
+    <Box flexDirection="column" width={width}>
+      <Text color="cyan" bold>
+        Detail Card
+      </Text>
+      <Text color="white" bold>
+        {truncate(card.name, width)}
+      </Text>
+      {card.desc ? (
+        <Text color="gray">{truncate(card.desc, width)}</Text>
+      ) : (
+        <Text color="gray">(Tanpa deskripsi)</Text>
+      )}
+      {card.due ? (
+        <Text color={card.dueComplete ? "green" : "red"}>
+          Due: {new Date(card.due).toLocaleDateString("id")}
+          {card.dueComplete ? " (done)" : ""}
+        </Text>
+      ) : (
+        <Text color="gray">Due: -</Text>
+      )}
+      <Text color="blue">{card.shortUrl}</Text>
     </Box>
   );
 }
@@ -125,6 +210,9 @@ function TextInputScreen({
 
 export default function App() {
   const { exit } = useApp();
+  const { stdout } = useStdout();
+  const columns = stdout?.columns ?? 80;
+  const rows = stdout?.rows ?? 24;
 
   const [screen, setScreen] = useState<Screen>("boards");
   const [loading, setLoading] = useState(false);
@@ -135,7 +223,9 @@ export default function App() {
 
   const [boards, setBoards] = useState<TrelloBoard[]>([]);
   const [lists, setLists] = useState<TrelloList[]>([]);
-  const [cards, setCards] = useState<TrelloCard[]>([]);
+  const [cardsByList, setCardsByList] = useState<Record<string, TrelloCard[]>>(
+    {},
+  );
   const [checklists, setChecklists] = useState<TrelloChecklist[]>([]);
   const [comments, setComments] = useState<api.TrelloComment[]>([]);
 
@@ -144,6 +234,10 @@ export default function App() {
   const [selectedCard, setSelectedCard] = useState<TrelloCard | null>(null);
   const [selectedChecklist, setSelectedChecklist] =
     useState<TrelloChecklist | null>(null);
+  const [listIndex, setListIndex] = useState(0);
+  const [listCardIndex, setListCardIndex] = useState<Record<string, number>>(
+    {},
+  );
 
   const flash = (msg: string, color = "green") => {
     setStatus(msg);
@@ -186,23 +280,100 @@ export default function App() {
     }
   }, [screen]);
 
+  useEffect(() => {
+    if (lists.length === 0) {
+      setSelectedList(null);
+      setListIndex(0);
+      return;
+    }
+    const nextIndex = clamp(listIndex, 0, lists.length - 1);
+    setListIndex(nextIndex);
+    setSelectedList(lists[nextIndex]);
+  }, [lists, listIndex]);
+
+  useEffect(() => {
+    if (lists.length === 0) return;
+    setListIndex(0);
+    setListCardIndex((prev) => {
+      const next: Record<string, number> = {};
+      lists.forEach((list) => {
+        next[list.id] = prev[list.id] ?? 0;
+      });
+      return next;
+    });
+  }, [lists]);
+
+  useEffect(() => {
+    if (lists.length === 0) return;
+    setListCardIndex((prev) => {
+      const next: Record<string, number> = { ...prev };
+      lists.forEach((list) => {
+        const maxIndex = cardsByList[list.id]?.length ?? 0;
+        const current = next[list.id] ?? 0;
+        next[list.id] = clamp(current, 0, maxIndex);
+      });
+      return next;
+    });
+  }, [cardsByList, lists]);
+
   useInput((_input, key) => {
     if (key.escape) handleBack();
     if (_input === "q") exit();
+    if (screen === "lists") {
+      if (key.leftArrow) {
+        setListIndex((current) => clamp(current - 1, 0, lists.length - 1));
+      }
+      if (key.rightArrow) {
+        setListIndex((current) => clamp(current + 1, 0, lists.length - 1));
+      }
+      if (key.upArrow) {
+        const list = lists[listIndex];
+        if (!list) return;
+        const maxIndex = cardsByList[list.id]?.length ?? 0;
+        setListCardIndex((prev) => {
+          const current = prev[list.id] ?? 0;
+          const next = clamp(current - 1, 0, maxIndex);
+          return { ...prev, [list.id]: next };
+        });
+      }
+      if (key.downArrow) {
+        const list = lists[listIndex];
+        if (!list) return;
+        const maxIndex = cardsByList[list.id]?.length ?? 0;
+        setListCardIndex((prev) => {
+          const current = prev[list.id] ?? 0;
+          const next = clamp(current + 1, 0, maxIndex);
+          return { ...prev, [list.id]: next };
+        });
+      }
+      if (key.return) {
+        const list = lists[listIndex];
+        if (!list) return;
+        const listCards = cardsByList[list.id] ?? [];
+        const index = listCardIndex[list.id] ?? 0;
+        if (index >= listCards.length) {
+          setSelectedList(list);
+          setScreen("create_card");
+        } else {
+          setSelectedList(list);
+          setSelectedCard(listCards[index]);
+          setScreen("card_detail");
+        }
+      }
+    }
   });
 
   function handleBack() {
     clearError();
     if (screen === "boards") return exit();
     if (screen === "lists") setScreen("boards");
-    else if (screen === "cards") setScreen("lists");
-    else if (screen === "card_detail") setScreen("cards");
+    else if (screen === "card_detail") setScreen("lists");
     else if (screen === "checklists") setScreen("card_detail");
     else if (screen === "add_checklist") setScreen("checklists");
     else if (screen === "add_checkitem") setScreen("checklists");
     else if (screen === "comments") setScreen("card_detail");
     else if (screen === "add_comment") setScreen("comments");
-    else if (screen === "create_card") setScreen("cards");
+    else if (screen === "create_card") setScreen("lists");
     else if (screen === "edit_card") setScreen("card_detail");
     else if (screen === "move_card") setScreen("card_detail");
     else setScreen("boards");
@@ -220,7 +391,7 @@ export default function App() {
   function requireSelectedCard(): TrelloCard | null {
     if (!selectedCard) {
       showError("Card belum dipilih.");
-      setScreen("cards");
+      setScreen("lists");
       return null;
     }
     return selectedCard;
@@ -242,7 +413,18 @@ export default function App() {
     startLoading();
     try {
       const ls = await api.getLists(board.id);
+      const cardsByListEntries = await Promise.all(
+        ls.map(async (list) => ({
+          listId: list.id,
+          cards: await api.getCards(list.id),
+        })),
+      );
+      const nextCardsByList: Record<string, TrelloCard[]> = {};
+      cardsByListEntries.forEach((entry) => {
+        nextCardsByList[entry.listId] = entry.cards;
+      });
       setLists(ls);
+      setCardsByList(nextCardsByList);
       setLoading(false);
       setScreen("lists");
     } catch (err: any) {
@@ -252,37 +434,15 @@ export default function App() {
   }
 
   // ── List select ──────────────────────────────────────────────────────────────
-  async function handleListSelect(item: { value: TrelloList | "back" }) {
-    if (item.value === "back") return handleBack();
-    const list = item.value as TrelloList;
-    setSelectedList(list);
-    startLoading();
-    try {
-      const cs = await api.getCards(list.id);
-      setCards(cs);
-      setLoading(false);
-      setScreen("cards");
-    } catch (err: any) {
-      showError("Gagal load cards pada list ini.", err?.message || "");
-      setLoading(false);
-    }
-  }
-
-  // ── Card select ──────────────────────────────────────────────────────────────
-  async function handleCardSelect(item: {
-    value: TrelloCard | "create" | "back";
-  }) {
-    if (item.value === "back") return handleBack();
-    if (item.value === "create") return setScreen("create_card");
-    const card = item.value as TrelloCard;
-    setSelectedCard(card);
-    setScreen("card_detail");
+  async function refreshListCards(listId: string) {
+    const cs = await api.getCards(listId);
+    setCardsByList((prev) => ({ ...prev, [listId]: cs }));
+    return cs;
   }
 
   // ── Card detail actions ──────────────────────────────────────────────────────
   async function handleCardAction(item: { value: string }) {
     const action = item.value;
-    if (action === "back") return handleBack();
     if (action === "checklists") {
       const card = requireSelectedCard();
       if (!card) return;
@@ -324,11 +484,10 @@ export default function App() {
     startLoading();
     try {
       await api.createCard(list.id, name.trim());
-      const cs = await api.getCards(list.id);
-      setCards(cs);
+      await refreshListCards(list.id);
       setLoading(false);
       flash(`Card "${name}" dibuat.`);
-      setScreen("cards");
+      setScreen("lists");
     } catch (err: any) {
       showError("Gagal membuat card baru.", err?.message || "");
       setLoading(false);
@@ -344,6 +503,7 @@ export default function App() {
     try {
       const updated = await api.updateCard(card.id, { name: newName.trim() });
       setSelectedCard(updated);
+      await refreshListCards(updated.idList);
       setLoading(false);
       flash("Card diupdate.");
       setScreen("card_detail");
@@ -354,18 +514,18 @@ export default function App() {
   }
 
   // ── Move card ────────────────────────────────────────────────────────────────
-  async function handleMoveCard(item: { value: TrelloList | "back" }) {
-    if (item.value === "back") return handleBack();
+  async function handleMoveCard(item: { value: TrelloList }) {
     const targetList = item.value as TrelloList;
     const card = requireSelectedCard();
     const list = requireSelectedList();
     if (!card || !list) return;
     startLoading();
     try {
+      const sourceListId = card.idList;
       const updated = await api.updateCard(card.id, { idList: targetList.id });
       setSelectedCard(updated);
-      const cs = await api.getCards(list.id);
-      setCards(cs);
+      await refreshListCards(sourceListId);
+      await refreshListCards(targetList.id);
       setLoading(false);
       flash(`Card dipindah ke "${targetList.name}".`);
       setScreen("card_detail");
@@ -379,7 +539,6 @@ export default function App() {
   async function handleChecklistAction(item: {
     value: string | TrelloChecklist;
   }) {
-    if (item.value === "back") return handleBack();
     if (item.value === "add_checklist") return setScreen("add_checklist");
     const cl = item.value as TrelloChecklist;
     setSelectedChecklist(cl);
@@ -405,23 +564,8 @@ export default function App() {
   }
 
   async function handleCheckItemAction(item: {
-    value: TrelloCheckItem | "add" | "back";
+    value: TrelloCheckItem | "add";
   }) {
-    if (item.value === "back") {
-      const card = requireSelectedCard();
-      if (!card) return;
-      startLoading();
-      try {
-        const cls = await api.getChecklists(card.id);
-        setChecklists(cls);
-        setLoading(false);
-        return setScreen("checklists");
-      } catch (err: any) {
-        showError("Gagal load checklists.", err?.message || "");
-        setLoading(false);
-        return;
-      }
-    }
     if (item.value === "add") return setScreen("add_checkitem");
     const ci = item.value as TrelloCheckItem;
     const newState = ci.state === "complete" ? "incomplete" : "complete";
@@ -489,162 +633,177 @@ export default function App() {
     }
   }
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────-----------------
 
-  if (loading) return <Loading label="Loading..." />;
+  const width = Math.max(40, columns);
+  const height = Math.max(10, rows);
+  const headerHeight = 3;
+  const footerHeight = 2;
+  const contentHeight = Math.max(1, height - headerHeight - footerHeight);
+  const contentWidth = Math.max(20, width - 4);
 
-  // BOARDS
-  if (screen === "boards") {
+  const headerTitle = (() => {
+    switch (screen) {
+      case "boards":
+        return "Boards";
+      case "lists":
+        return selectedBoard ? `Board: ${selectedBoard.name}` : "Lists";
+      case "card_detail":
+        return selectedCard ? `Card: ${selectedCard.name}` : "Card";
+      case "create_card":
+        return "Buat Card Baru";
+      case "edit_card":
+        return "Edit Card";
+      case "move_card":
+        return "Pindahkan Card";
+      case "checklists":
+        return "Checklists";
+      case "add_checklist":
+        return "Buat Checklist";
+      case "add_checkitem":
+        return "Checklist Items";
+      case "comments":
+        return "Komentar";
+      case "add_comment":
+        return "Tambah Komentar";
+      default:
+        return "Trello CLI";
+    }
+  })();
+
+  const footerHints = (() => {
+    switch (screen) {
+      case "boards":
+        return ["Up/Down: navigasi", "Enter: pilih", "Q: quit"];
+      case "lists":
+        return [
+          "Left/Right: list",
+          "Up/Down: card",
+          "Enter: buka",
+          "Esc: back",
+          "Q: quit",
+        ];
+      case "card_detail":
+      case "checklists":
+      case "comments":
+        return ["Up/Down: navigasi", "Enter: pilih", "Esc: back", "Q: quit"];
+      case "create_card":
+      case "edit_card":
+      case "add_checklist":
+      case "add_checkitem":
+      case "add_comment":
+        return ["Enter: simpan", "Esc: back", "Q: quit"];
+      case "move_card":
+        return ["Up/Down: pilih", "Enter: pindah", "Esc: back", "Q: quit"];
+      default:
+        return ["Q: quit"];
+    }
+  })();
+
+  let content: React.ReactNode = null;
+
+  if (loading) {
+    content = <Loading label="Loading..." />;
+  } else if (screen === "boards") {
     const items = boards.map((b) => ({ label: b.name, value: b, key: b.id }));
-    return (
+    content = (
       <Box flexDirection="column">
-        <Header title="Pilih Board" />
-        <ErrorBanner msg={error} detail={errorDetail} />
         <SelectInput items={items} onSelect={handleBoardSelect} />
-        <Box marginTop={1}>
-          <Text color="gray">[Q] quit</Text>
-        </Box>
         <StatusMsg msg={status} color={statusColor} />
       </Box>
     );
-  }
+  } else if (screen === "lists") {
+    const columnWidth = Math.max(18, Math.floor((contentWidth - 4) / 3));
+    const columnGap = 2;
+    const maxVisible = Math.max(
+      1,
+      Math.floor((contentWidth + columnGap) / (columnWidth + columnGap)),
+    );
+    const maxStart = Math.max(0, lists.length - maxVisible);
+    const start = clamp(listIndex - Math.floor(maxVisible / 2), 0, maxStart);
+    const visibleLists = lists.slice(start, start + maxVisible);
+    const columnHeight = Math.max(3, contentHeight - 1);
 
-  // LISTS
-  if (screen === "lists") {
-    const items = [
-      ...lists.map((l) => ({
-        label: l.name,
-        value: l as TrelloList | "back",
-        key: l.id,
-      })),
-      { label: "Back", value: "back" as const, key: "back" },
-    ];
-    return (
-      <Box flexDirection="column">
-        <Header title={`${selectedBoard?.name} > Lists`} />
-        <ErrorBanner msg={error} detail={errorDetail} />
-        <SelectInput items={items} onSelect={handleListSelect} />
-        <Box marginTop={1}>
-          <Text color="gray">[ESC] back</Text>
-        </Box>
+    content = (
+      <Box flexDirection="row">
+        {visibleLists.map((list, idx) => {
+          const realIndex = start + idx;
+          const isActive = realIndex === listIndex;
+          const listCards = cardsByList[list.id] ?? [];
+          const selectedIndex = listCardIndex[list.id] ?? 0;
+          return (
+            <Box
+              key={list.id}
+              flexDirection="column"
+              width={columnWidth}
+              marginRight={idx === visibleLists.length - 1 ? 0 : columnGap}
+            >
+              <ListColumn
+                list={list}
+                cards={listCards}
+                selectedIndex={selectedIndex}
+                width={columnWidth}
+                height={columnHeight}
+                isActive={isActive}
+              />
+            </Box>
+          );
+        })}
       </Box>
     );
-  }
-
-  // CARDS
-  if (screen === "cards") {
-    const items = [
-      ...cards.map((c) => ({
-        label:
-          c.name +
-          (c.due ? ` (Due ${new Date(c.due).toLocaleDateString("id")})` : ""),
-        value: c as TrelloCard | "create" | "back",
-        key: c.id,
-      })),
-      { label: "Buat card baru", value: "create" as const, key: "create" },
-      { label: "Back", value: "back" as const, key: "back" },
-    ];
-    return (
-      <Box flexDirection="column">
-        <Header title={`${selectedList?.name} > Cards`} />
-        <ErrorBanner msg={error} detail={errorDetail} />
-        {cards.length === 0 && (
-          <Text color="gray">Belum ada card di list ini.</Text>
-        )}
-        <SelectInput items={items} onSelect={handleCardSelect} />
-        <Box marginTop={1}>
-          <Text color="gray">[ESC] back</Text>
-        </Box>
-        <StatusMsg msg={status} color={statusColor} />
-      </Box>
-    );
-  }
-
-  // CARD DETAIL
-  if (screen === "card_detail" && selectedCard) {
+  } else if (screen === "card_detail" && selectedCard) {
     const actions = [
       { label: "Checklists", value: "checklists" },
       { label: "Komentar", value: "comments" },
       { label: "Edit nama", value: "edit" },
       { label: "Pindahkan", value: "move" },
-      { label: "Back", value: "back" },
     ];
-    return (
-      <Box flexDirection="column">
-        <Header title="Detail Card" />
-        <ErrorBanner msg={error} detail={errorDetail} />
-        <Box marginBottom={1} flexDirection="column">
-          <Text bold color="yellow">
-            {selectedCard.name}
-          </Text>
-          {selectedCard.desc && <Text color="gray">{selectedCard.desc}</Text>}
-          {selectedCard.due && (
-            <Text color={selectedCard.dueComplete ? "green" : "red"}>
-              Due: {new Date(selectedCard.due).toLocaleDateString("id")}
-              {selectedCard.dueComplete ? " (done)" : ""}
-            </Text>
-          )}
-          <Text color="blue">{selectedCard.shortUrl}</Text>
+    const listWidth = Math.max(20, Math.floor(contentWidth * 0.45));
+    const detailWidth = Math.max(20, contentWidth - listWidth - 2);
+    content = (
+      <Box flexDirection="row">
+        <Box flexDirection="column" width={listWidth}>
+          <Text color="gray">Aksi</Text>
+          <SelectInput items={actions} onSelect={handleCardAction} />
+          <StatusMsg msg={status} color={statusColor} />
         </Box>
-        <SelectInput items={actions} onSelect={handleCardAction} />
-        <StatusMsg msg={status} color={statusColor} />
+        <Box flexDirection="column" width={detailWidth} marginLeft={2}>
+          <CardDetailPanel card={selectedCard} width={detailWidth} />
+        </Box>
       </Box>
     );
-  }
-
-  // CREATE CARD
-  if (screen === "create_card") {
-    return (
-      <TextInputScreen
-        title="Buat Card Baru"
+  } else if (screen === "create_card") {
+    content = (
+      <TextInputPanel
         prompt={`Nama card baru di "${selectedList?.name}":`}
         onSubmit={handleCreateCard}
-        onBack={handleBack}
-        error={error}
-        errorDetail={errorDetail}
       />
     );
-  }
-
-  // EDIT CARD
-  if (screen === "edit_card" && selectedCard) {
-    return (
-      <TextInputScreen
-        title="Edit Card"
+  } else if (screen === "edit_card" && selectedCard) {
+    content = (
+      <TextInputPanel
         prompt="Nama baru:"
         onSubmit={handleEditCard}
-        onBack={handleBack}
         initialValue={selectedCard.name}
-        error={error}
-        errorDetail={errorDetail}
       />
     );
-  }
-
-  // MOVE CARD
-  if (screen === "move_card") {
+  } else if (screen === "move_card") {
     const items = [
       ...lists
         .filter((l) => l.id !== selectedCard?.idList)
         .map((l) => ({
           label: l.name,
-          value: l as TrelloList | "back",
+          value: l as TrelloList,
           key: l.id,
         })),
-      { label: "Back", value: "back" as const, key: "back" },
     ];
-    return (
+    content = (
       <Box flexDirection="column">
-        <Header title={`Pindahkan "${selectedCard?.name}"`} />
-        <ErrorBanner msg={error} detail={errorDetail} />
         <Text color="gray">Pilih list tujuan:</Text>
         <SelectInput items={items} onSelect={handleMoveCard} />
       </Box>
     );
-  }
-
-  // CHECKLISTS
-  if (screen === "checklists") {
+  } else if (screen === "checklists") {
     const items = [
       ...checklists.map((cl) => {
         const total = cl.checkItems.length;
@@ -662,12 +821,9 @@ export default function App() {
         value: "add_checklist",
         key: "add_checklist",
       },
-      { label: "Back", value: "back", key: "back" },
     ];
-    return (
+    content = (
       <Box flexDirection="column">
-        <Header title={`Checklists > "${selectedCard?.name}"`} />
-        <ErrorBanner msg={error} detail={errorDetail} />
         {checklists.length === 0 && (
           <Text color="gray">Belum ada checklist.</Text>
         )}
@@ -675,41 +831,31 @@ export default function App() {
         <StatusMsg msg={status} color={statusColor} />
       </Box>
     );
-  }
-
-  // ADD CHECKLIST
-  if (screen === "add_checklist") {
-    return (
-      <TextInputScreen
-        title="Buat Checklist"
+  } else if (screen === "add_checklist") {
+    content = (
+      <TextInputPanel
         prompt="Nama checklist:"
         onSubmit={handleCreateChecklist}
-        onBack={handleBack}
-        error={error}
-        errorDetail={errorDetail}
       />
     );
-  }
-
-  // CHECK ITEMS
-  if (screen === "add_checkitem" && selectedChecklist) {
+  } else if (screen === "add_checkitem" && selectedChecklist) {
     const items = [
       ...selectedChecklist.checkItems.map((ci: TrelloCheckItem) => ({
         label: `${ci.state === "complete" ? "[x]" : "[ ]"} ${ci.name}`,
-        value: ci as TrelloCheckItem | "add" | "back",
+        value: ci as TrelloCheckItem | "add",
         key: ci.id,
       })),
       { label: "Tambah item", value: "add" as const, key: "add" },
-      { label: "Back", value: "back" as const, key: "back" },
     ];
     const total = selectedChecklist.checkItems.length;
     const done = selectedChecklist.checkItems.filter(
       (i: TrelloCheckItem) => i.state === "complete",
     ).length;
-    return (
+    content = (
       <Box flexDirection="column">
-        <Header title={`${selectedChecklist.name}  [${done}/${total}]`} />
-        <ErrorBanner msg={error} detail={errorDetail} />
+        <Text color="gray">
+          {selectedChecklist.name} [{done}/{total}]
+        </Text>
         <Text color="gray">
           Pilih item untuk toggle [x]/[ ], atau tambah baru:
         </Text>
@@ -719,19 +865,11 @@ export default function App() {
         <StatusMsg msg={status} color={statusColor} />
       </Box>
     );
-  }
-
-  // ADD CHECK ITEM (text input)
-  if (screen === "add_checkitem" && !selectedChecklist) {
-    return <Loading label="Loading checklist..." />;
-  }
-
-  // COMMENTS
-  if (screen === "comments") {
-    return (
+  } else if (screen === "add_checkitem" && !selectedChecklist) {
+    content = <Loading label="Loading checklist..." />;
+  } else if (screen === "comments") {
+    content = (
       <Box flexDirection="column">
-        <Header title={`Komentar > "${selectedCard?.name}"`} />
-        <ErrorBanner msg={error} detail={errorDetail} />
         {comments.length === 0 && <Text color="gray">Belum ada komentar.</Text>}
         {comments.map((c) => (
           <Box key={c.id} flexDirection="column" marginBottom={1}>
@@ -744,34 +882,37 @@ export default function App() {
         ))}
         <Box marginTop={1} flexDirection="column">
           <SelectInput
-            items={[
-              { label: "Tambah komentar", value: "add" },
-              { label: "Back", value: "back" },
-            ]}
+            items={[{ label: "Tambah komentar", value: "add" }]}
             onSelect={(item) => {
               if (item.value === "add") setScreen("add_comment");
-              else handleBack();
             }}
           />
         </Box>
         <StatusMsg msg={status} color={statusColor} />
       </Box>
     );
-  }
-
-  // ADD COMMENT
-  if (screen === "add_comment") {
-    return (
-      <TextInputScreen
-        title="Tambah Komentar"
-        prompt="Tulis komentar:"
-        onSubmit={handleAddComment}
-        onBack={handleBack}
-        error={error}
-        errorDetail={errorDetail}
-      />
+  } else if (screen === "add_comment") {
+    content = (
+      <TextInputPanel prompt="Tulis komentar:" onSubmit={handleAddComment} />
     );
+  } else {
+    content = <Loading label="Loading..." />;
   }
 
-  return <Loading label="Loading..." />;
+  return (
+    <Box flexDirection="column" width={width} height={height}>
+      <HeaderBar title={headerTitle} width={width} />
+      <Box
+        flexDirection="column"
+        width={width}
+        height={contentHeight}
+        paddingX={2}
+        paddingY={1}
+      >
+        <ErrorBanner msg={error} detail={errorDetail} />
+        {content}
+      </Box>
+      <FooterBar hints={footerHints} width={width} />
+    </Box>
+  );
 }
