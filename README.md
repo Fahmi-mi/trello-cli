@@ -1,21 +1,22 @@
-# 🗂 Trello CLI
+# Trello CLI
 
 Trello CLI interaktif yang dibangun dengan TypeScript + Ink (React untuk terminal).
 
-## ✨ Fitur
+## Fitur
 
-- 📋 Browse boards, lists, dan cards
-- ➕ Buat card baru
-- ✏️ Edit nama card
-- ➡️ Pindahkan card antar list
-- ☑️ Kelola checklist (buat, tambah item, toggle ✅/⬜)
-- 💬 Lihat & tambah komentar
+- Browse boards, lists, dan cards
+- Buat card baru
+- Edit nama card
+- Pindahkan card antar list
+- Kelola checklist (buat, tambah item, toggle status)
+- Lihat & tambah komentar
 
-## ⚡ Setup
+## Setup
 
 ### 1. Dapatkan API Key & Token
 
 Buka https://trello.com/app-key dan:
+
 - Copy **API Key**
 - Klik link "Token" untuk generate token, lalu copy
 
@@ -56,16 +57,16 @@ npm install -g .
 trello
 ```
 
-## 🎮 Navigasi
+## Navigasi
 
-| Tombol | Aksi |
-|--------|------|
-| ↑ / ↓ | Navigasi menu |
-| Enter | Pilih |
-| ESC | Kembali |
-| Q | Keluar |
+| Tombol | Aksi          |
+| ------ | ------------- |
+| ↑ / ↓  | Navigasi menu |
+| Enter  | Pilih         |
+| ESC    | Kembali       |
+| Q      | Keluar        |
 
-## 📁 Struktur
+## Struktur
 
 ```
 src/
