@@ -44,19 +44,23 @@ function TextInputPanel({ prompt, onSubmit, initialValue = "", }) {
     return (_jsxs(Box, { flexDirection: "column", children: [_jsx(Text, { color: "yellow", children: prompt }), _jsxs(Box, { marginTop: 1, children: [_jsx(Text, { color: "gray", children: "> " }), _jsx(TextInput, { value: value, onChange: setValue, onSubmit: onSubmit })] })] }));
 }
 function ListColumn({ list, cards, selectedIndex, width, height, isActive, }) {
-    const header = truncate(`${list.name} (${cards.length})`, width);
+    const innerWidth = Math.max(1, width - 2);
+    const header = truncate(`${list.name} (${cards.length})`, innerWidth);
     const items = [...cards.map((card) => card.name), "Buat card baru"];
     const viewHeight = Math.max(1, height - 1);
     const maxStart = Math.max(0, items.length - viewHeight);
     const start = clamp(selectedIndex - Math.floor(viewHeight / 2), 0, maxStart);
     const visible = items.slice(start, start + viewHeight);
-    return (_jsxs(Box, { flexDirection: "column", width: width, children: [_jsx(Text, { color: isActive ? "cyan" : "gray", children: header }), visible.length === 0 ? (_jsx(Text, { color: "gray", children: "(Kosong)" })) : (visible.map((label, idx) => {
+    return (_jsxs(Box, { flexDirection: "column", width: width, paddingX: 1, children: [_jsx(Text, { color: isActive ? "cyan" : "gray", children: header }), visible.length === 0 ? (_jsx(Text, { color: "gray", children: "(Kosong)" })) : (visible.map((label, idx) => {
                 const realIndex = start + idx;
                 const isSelected = isActive && realIndex === selectedIndex;
                 const isAction = realIndex === items.length - 1;
-                const text = truncate(label, Math.max(1, width - 2));
+                const text = truncate(label, innerWidth);
                 return (_jsx(Box, { children: _jsx(Text, { backgroundColor: isSelected ? "cyan" : undefined, color: isSelected ? "black" : isAction ? "cyan" : "white", children: ` ${text}` }) }, `${list.id}-${realIndex}`));
             }))] }));
+}
+function VerticalDivider({ height }) {
+    return (_jsx(Box, { flexDirection: "column", width: 1, height: height, children: Array.from({ length: height }).map((_, index) => (_jsx(Text, { color: "blue", children: "|" }, index))) }));
 }
 function CardDetailPanel({ card, width, }) {
     if (!card) {
@@ -64,7 +68,7 @@ function CardDetailPanel({ card, width, }) {
     }
     return (_jsxs(Box, { flexDirection: "column", width: width, children: [_jsx(Text, { color: "cyan", bold: true, children: "Detail Card" }), _jsx(Text, { color: "white", bold: true, children: truncate(card.name, width) }), card.desc ? (_jsx(Text, { color: "gray", children: truncate(card.desc, width) })) : (_jsx(Text, { color: "gray", children: "(Tanpa deskripsi)" })), card.due ? (_jsxs(Text, { color: card.dueComplete ? "green" : "red", children: ["Due: ", new Date(card.due).toLocaleDateString("id"), card.dueComplete ? " (done)" : ""] })) : (_jsx(Text, { color: "gray", children: "Due: -" })), _jsx(Text, { color: "blue", children: card.shortUrl })] }));
 }
-// ── App ───────────────────────────────────────────────────────────────────────
+// ── App ─────────────────────────────────────────────────────────────────-----
 export default function App() {
     const { exit } = useApp();
     const { stdout } = useStdout();
@@ -104,7 +108,7 @@ export default function App() {
         setLoading(true);
         clearError();
     };
-    // ── Load boards ─────────────────────────────────────────────────────────────
+    // ── Load boards ─────────────────────────────────────────────────----------
     useEffect(() => {
         if (screen === "boards") {
             startLoading();
@@ -258,7 +262,7 @@ export default function App() {
         }
         return selectedChecklist;
     }
-    // ── Board select ─────────────────────────────────────────────────────────────
+    // ── Board select ─────────────────────────────────────────────────----------
     async function handleBoardSelect(item) {
         const board = item.value;
         setSelectedBoard(board);
@@ -283,13 +287,12 @@ export default function App() {
             setLoading(false);
         }
     }
-    // ── List select ──────────────────────────────────────────────────────────────
     async function refreshListCards(listId) {
         const cs = await api.getCards(listId);
         setCardsByList((prev) => ({ ...prev, [listId]: cs }));
         return cs;
     }
-    // ── Card detail actions ──────────────────────────────────────────────────────
+    // ── Card detail actions ─────────────────────────────────────────────────---
     async function handleCardAction(item) {
         const action = item.value;
         if (action === "checklists") {
@@ -331,7 +334,7 @@ export default function App() {
             setScreen("move_card");
         }
     }
-    // ── Create card ──────────────────────────────────────────────────────────────
+    // ── Create card ─────────────────────────────────────────────────----------
     async function handleCreateCard(name) {
         if (!name.trim())
             return;
@@ -351,7 +354,7 @@ export default function App() {
             setLoading(false);
         }
     }
-    // ── Edit card ────────────────────────────────────────────────────────────────
+    // ── Edit card ─────────────────────────────────────────────────------------
     async function handleEditCard(newName) {
         if (!newName.trim())
             return;
@@ -372,7 +375,7 @@ export default function App() {
             setLoading(false);
         }
     }
-    // ── Move card ────────────────────────────────────────────────────────────────
+    // ── Move card ─────────────────────────────────────────────────------------
     async function handleMoveCard(item) {
         const targetList = item.value;
         const card = requireSelectedCard();
@@ -395,7 +398,7 @@ export default function App() {
             setLoading(false);
         }
     }
-    // ── Checklist actions ────────────────────────────────────────────────────────
+    // ── Checklist actions ─────────────────────────────────────────────────-----
     async function handleChecklistAction(item) {
         if (item.value === "add_checklist")
             return setScreen("add_checklist");
@@ -472,7 +475,7 @@ export default function App() {
             setLoading(false);
         }
     }
-    // ── Comments ─────────────────────────────────────────────────────────────────
+    // ── Comments ─────────────────────────────────────────────────--------------
     async function handleAddComment(text) {
         if (!text.trim())
             return;
@@ -566,7 +569,7 @@ export default function App() {
     }
     else if (screen === "lists") {
         const columnWidth = Math.max(18, Math.floor((contentWidth - 4) / 3));
-        const columnGap = 2;
+        const columnGap = 1;
         const maxVisible = Math.max(1, Math.floor((contentWidth + columnGap) / (columnWidth + columnGap)));
         const maxStart = Math.max(0, lists.length - maxVisible);
         const start = clamp(listIndex - Math.floor(maxVisible / 2), 0, maxStart);
@@ -577,7 +580,7 @@ export default function App() {
                 const isActive = realIndex === listIndex;
                 const listCards = cardsByList[list.id] ?? [];
                 const selectedIndex = listCardIndex[list.id] ?? 0;
-                return (_jsx(Box, { flexDirection: "column", width: columnWidth, marginRight: idx === visibleLists.length - 1 ? 0 : columnGap, children: _jsx(ListColumn, { list: list, cards: listCards, selectedIndex: selectedIndex, width: columnWidth, height: columnHeight, isActive: isActive }) }, list.id));
+                return (_jsxs(Box, { flexDirection: "row", children: [_jsx(Box, { flexDirection: "column", width: columnWidth, children: _jsx(ListColumn, { list: list, cards: listCards, selectedIndex: selectedIndex, width: columnWidth, height: columnHeight, isActive: isActive }) }), idx === visibleLists.length - 1 ? null : (_jsx(Box, { marginX: columnGap, children: _jsx(VerticalDivider, { height: columnHeight }) }))] }, list.id));
             }) }));
     }
     else if (screen === "card_detail" && selectedCard) {

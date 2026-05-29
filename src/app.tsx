@@ -135,7 +135,8 @@ function ListColumn({
   height: number;
   isActive: boolean;
 }) {
-  const header = truncate(`${list.name} (${cards.length})`, width);
+  const innerWidth = Math.max(1, width - 2);
+  const header = truncate(`${list.name} (${cards.length})`, innerWidth);
   const items = [...cards.map((card) => card.name), "Buat card baru"];
   const viewHeight = Math.max(1, height - 1);
   const maxStart = Math.max(0, items.length - viewHeight);
@@ -143,7 +144,7 @@ function ListColumn({
   const visible = items.slice(start, start + viewHeight);
 
   return (
-    <Box flexDirection="column" width={width}>
+    <Box flexDirection="column" width={width} paddingX={1}>
       <Text color={isActive ? "cyan" : "gray"}>{header}</Text>
       {visible.length === 0 ? (
         <Text color="gray">(Kosong)</Text>
@@ -152,7 +153,7 @@ function ListColumn({
           const realIndex = start + idx;
           const isSelected = isActive && realIndex === selectedIndex;
           const isAction = realIndex === items.length - 1;
-          const text = truncate(label, Math.max(1, width - 2));
+          const text = truncate(label, innerWidth);
           return (
             <Box key={`${list.id}-${realIndex}`}>
               <Text
@@ -165,6 +166,18 @@ function ListColumn({
           );
         })
       )}
+    </Box>
+  );
+}
+
+function VerticalDivider({ height }: { height: number }) {
+  return (
+    <Box flexDirection="column" width={1} height={height}>
+      {Array.from({ length: height }).map((_, index) => (
+        <Text key={index} color="blue">
+          |
+        </Text>
+      ))}
     </Box>
   );
 }
@@ -206,7 +219,7 @@ function CardDetailPanel({
   );
 }
 
-// ── App ───────────────────────────────────────────────────────────────────────
+// ── App ─────────────────────────────────────────────────────────────────-----
 
 export default function App() {
   const { exit } = useApp();
@@ -260,7 +273,7 @@ export default function App() {
     clearError();
   };
 
-  // ── Load boards ─────────────────────────────────────────────────────────────
+  // ── Load boards ─────────────────────────────────────────────────----------
   useEffect(() => {
     if (screen === "boards") {
       startLoading();
@@ -406,7 +419,7 @@ export default function App() {
     return selectedChecklist;
   }
 
-  // ── Board select ─────────────────────────────────────────────────────────────
+  // ── Board select ─────────────────────────────────────────────────----------
   async function handleBoardSelect(item: { value: TrelloBoard }) {
     const board = item.value;
     setSelectedBoard(board);
@@ -433,14 +446,13 @@ export default function App() {
     }
   }
 
-  // ── List select ──────────────────────────────────────────────────────────────
   async function refreshListCards(listId: string) {
     const cs = await api.getCards(listId);
     setCardsByList((prev) => ({ ...prev, [listId]: cs }));
     return cs;
   }
 
-  // ── Card detail actions ──────────────────────────────────────────────────────
+  // ── Card detail actions ─────────────────────────────────────────────────---
   async function handleCardAction(item: { value: string }) {
     const action = item.value;
     if (action === "checklists") {
@@ -476,7 +488,7 @@ export default function App() {
     }
   }
 
-  // ── Create card ──────────────────────────────────────────────────────────────
+  // ── Create card ─────────────────────────────────────────────────----------
   async function handleCreateCard(name: string) {
     if (!name.trim()) return;
     const list = requireSelectedList();
@@ -494,7 +506,7 @@ export default function App() {
     }
   }
 
-  // ── Edit card ────────────────────────────────────────────────────────────────
+  // ── Edit card ─────────────────────────────────────────────────------------
   async function handleEditCard(newName: string) {
     if (!newName.trim()) return;
     const card = requireSelectedCard();
@@ -513,7 +525,7 @@ export default function App() {
     }
   }
 
-  // ── Move card ────────────────────────────────────────────────────────────────
+  // ── Move card ─────────────────────────────────────────────────------------
   async function handleMoveCard(item: { value: TrelloList }) {
     const targetList = item.value as TrelloList;
     const card = requireSelectedCard();
@@ -535,7 +547,7 @@ export default function App() {
     }
   }
 
-  // ── Checklist actions ────────────────────────────────────────────────────────
+  // ── Checklist actions ─────────────────────────────────────────────────-----
   async function handleChecklistAction(item: {
     value: string | TrelloChecklist;
   }) {
@@ -614,7 +626,7 @@ export default function App() {
     }
   }
 
-  // ── Comments ─────────────────────────────────────────────────────────────────
+  // ── Comments ─────────────────────────────────────────────────--------------
   async function handleAddComment(text: string) {
     if (!text.trim()) return;
     const card = requireSelectedCard();
@@ -714,7 +726,7 @@ export default function App() {
     );
   } else if (screen === "lists") {
     const columnWidth = Math.max(18, Math.floor((contentWidth - 4) / 3));
-    const columnGap = 2;
+    const columnGap = 1;
     const maxVisible = Math.max(
       1,
       Math.floor((contentWidth + columnGap) / (columnWidth + columnGap)),
@@ -732,20 +744,22 @@ export default function App() {
           const listCards = cardsByList[list.id] ?? [];
           const selectedIndex = listCardIndex[list.id] ?? 0;
           return (
-            <Box
-              key={list.id}
-              flexDirection="column"
-              width={columnWidth}
-              marginRight={idx === visibleLists.length - 1 ? 0 : columnGap}
-            >
-              <ListColumn
-                list={list}
-                cards={listCards}
-                selectedIndex={selectedIndex}
-                width={columnWidth}
-                height={columnHeight}
-                isActive={isActive}
-              />
+            <Box key={list.id} flexDirection="row">
+              <Box flexDirection="column" width={columnWidth}>
+                <ListColumn
+                  list={list}
+                  cards={listCards}
+                  selectedIndex={selectedIndex}
+                  width={columnWidth}
+                  height={columnHeight}
+                  isActive={isActive}
+                />
+              </Box>
+              {idx === visibleLists.length - 1 ? null : (
+                <Box marginX={columnGap}>
+                  <VerticalDivider height={columnHeight} />
+                </Box>
+              )}
             </Box>
           );
         })}
