@@ -38,6 +38,15 @@ function ErrorBanner({ msg, detail }) {
         return null;
     return (_jsxs(Box, { flexDirection: "column", marginBottom: 1, children: [_jsx(Text, { backgroundColor: "red", color: "white", children: " ERROR: " + msg + " " }), detail ? _jsx(Text, { color: "gray", children: detail }) : null] }));
 }
+function SectionTitle({ label }) {
+    return (_jsxs(Box, { flexDirection: "column", marginBottom: 1, children: [_jsx(Text, { color: "gray", children: label }), _jsx(Text, { color: "blue", children: "-".repeat(Math.max(3, label.length)) })] }));
+}
+function SelectIndicator({ isSelected }) {
+    return _jsx(Text, { children: isSelected ? " " : " " });
+}
+function SelectItem({ label, isSelected, }) {
+    return (_jsx(Text, { backgroundColor: isSelected ? "cyan" : undefined, color: isSelected ? "black" : "white", children: ` ${label}` }));
+}
 // ── Input panels ─────────────────────────────────────────────────------------
 function TextInputPanel({ prompt, onSubmit, initialValue = "", }) {
     const [value, setValue] = useState(initialValue);
@@ -565,7 +574,7 @@ export default function App() {
     }
     else if (screen === "boards") {
         const items = boards.map((b) => ({ label: b.name, value: b, key: b.id }));
-        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SelectInput, { items: items, onSelect: handleBoardSelect }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
+        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Boards" }), _jsx(SelectInput, { items: items, onSelect: handleBoardSelect, itemComponent: SelectItem, indicatorComponent: SelectIndicator }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
     }
     else if (screen === "lists") {
         const columnWidth = Math.max(18, Math.floor((contentWidth - 4) / 3));
@@ -592,7 +601,7 @@ export default function App() {
         ];
         const listWidth = Math.max(20, Math.floor(contentWidth * 0.45));
         const detailWidth = Math.max(20, contentWidth - listWidth - 2);
-        content = (_jsxs(Box, { flexDirection: "row", children: [_jsxs(Box, { flexDirection: "column", width: listWidth, children: [_jsx(Text, { color: "gray", children: "Aksi" }), _jsx(SelectInput, { items: actions, onSelect: handleCardAction }), _jsx(StatusMsg, { msg: status, color: statusColor })] }), _jsx(Box, { flexDirection: "column", width: detailWidth, marginLeft: 2, children: _jsx(CardDetailPanel, { card: selectedCard, width: detailWidth }) })] }));
+        content = (_jsxs(Box, { flexDirection: "row", children: [_jsxs(Box, { flexDirection: "column", width: listWidth, children: [_jsx(SectionTitle, { label: "Aksi" }), _jsx(SelectInput, { items: actions, onSelect: handleCardAction, itemComponent: SelectItem, indicatorComponent: SelectIndicator }), _jsx(StatusMsg, { msg: status, color: statusColor })] }), _jsx(Box, { flexDirection: "column", width: detailWidth, marginLeft: 2, children: _jsx(CardDetailPanel, { card: selectedCard, width: detailWidth }) })] }));
     }
     else if (screen === "create_card") {
         content = (_jsx(TextInputPanel, { prompt: `Nama card baru di "${selectedList?.name}":`, onSubmit: handleCreateCard }));
@@ -610,7 +619,7 @@ export default function App() {
                 key: l.id,
             })),
         ];
-        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(Text, { color: "gray", children: "Pilih list tujuan:" }), _jsx(SelectInput, { items: items, onSelect: handleMoveCard })] }));
+        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Pilih list tujuan" }), _jsx(SelectInput, { items: items, onSelect: handleMoveCard, itemComponent: SelectItem, indicatorComponent: SelectIndicator })] }));
     }
     else if (screen === "checklists") {
         const items = [
@@ -629,7 +638,7 @@ export default function App() {
                 key: "add_checklist",
             },
         ];
-        content = (_jsxs(Box, { flexDirection: "column", children: [checklists.length === 0 && (_jsx(Text, { color: "gray", children: "Belum ada checklist." })), _jsx(SelectInput, { items: items, onSelect: handleChecklistAction }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
+        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Checklists" }), checklists.length === 0 && (_jsx(Text, { color: "gray", children: "Belum ada checklist." })), _jsx(SelectInput, { items: items, onSelect: handleChecklistAction, itemComponent: SelectItem, indicatorComponent: SelectIndicator }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
     }
     else if (screen === "add_checklist") {
         content = (_jsx(TextInputPanel, { prompt: "Nama checklist:", onSubmit: handleCreateChecklist }));
@@ -645,16 +654,16 @@ export default function App() {
         ];
         const total = selectedChecklist.checkItems.length;
         const done = selectedChecklist.checkItems.filter((i) => i.state === "complete").length;
-        content = (_jsxs(Box, { flexDirection: "column", children: [_jsxs(Text, { color: "gray", children: [selectedChecklist.name, " [", done, "/", total, "]"] }), _jsx(Text, { color: "gray", children: "Pilih item untuk toggle [x]/[ ], atau tambah baru:" }), _jsx(Box, { marginTop: 1, children: _jsx(SelectInput, { items: items, onSelect: handleCheckItemAction }) }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
+        content = (_jsxs(Box, { flexDirection: "column", children: [_jsxs(Text, { color: "gray", children: [selectedChecklist.name, " [", done, "/", total, "]"] }), _jsx(Text, { color: "gray", children: "Pilih item untuk toggle [x]/[ ], atau tambah baru:" }), _jsx(Box, { marginTop: 1, children: _jsx(SelectInput, { items: items, onSelect: handleCheckItemAction, itemComponent: SelectItem, indicatorComponent: SelectIndicator }) }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
     }
     else if (screen === "add_checkitem" && !selectedChecklist) {
         content = _jsx(Loading, { label: "Loading checklist..." });
     }
     else if (screen === "comments") {
-        content = (_jsxs(Box, { flexDirection: "column", children: [comments.length === 0 && _jsx(Text, { color: "gray", children: "Belum ada komentar." }), comments.map((c) => (_jsxs(Box, { flexDirection: "column", marginBottom: 1, children: [_jsx(Text, { color: "cyan", bold: true, children: c.memberCreator.fullName }), _jsx(Text, { color: "gray", children: new Date(c.date).toLocaleString("id") }), _jsx(Text, { children: c.data.text })] }, c.id))), _jsx(Box, { marginTop: 1, flexDirection: "column", children: _jsx(SelectInput, { items: [{ label: "Tambah komentar", value: "add" }], onSelect: (item) => {
+        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Komentar" }), comments.length === 0 && _jsx(Text, { color: "gray", children: "Belum ada komentar." }), comments.map((c) => (_jsxs(Box, { flexDirection: "column", marginBottom: 1, children: [_jsx(Text, { color: "cyan", bold: true, children: c.memberCreator.fullName }), _jsx(Text, { color: "gray", children: new Date(c.date).toLocaleString("id") }), _jsx(Text, { children: c.data.text })] }, c.id))), _jsx(Box, { marginTop: 1, flexDirection: "column", children: _jsx(SelectInput, { items: [{ label: "Tambah komentar", value: "add" }], onSelect: (item) => {
                             if (item.value === "add")
                                 setScreen("add_comment");
-                        } }) }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
+                        }, itemComponent: SelectItem, indicatorComponent: SelectIndicator }) }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
     }
     else if (screen === "add_comment") {
         content = (_jsx(TextInputPanel, { prompt: "Tulis komentar:", onSubmit: handleAddComment }));

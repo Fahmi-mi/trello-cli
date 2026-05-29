@@ -96,6 +96,36 @@ function ErrorBanner({ msg, detail }: { msg: string; detail?: string }) {
   );
 }
 
+function SectionTitle({ label }: { label: string }) {
+  return (
+    <Box flexDirection="column" marginBottom={1}>
+      <Text color="gray">{label}</Text>
+      <Text color="blue">{"-".repeat(Math.max(3, label.length))}</Text>
+    </Box>
+  );
+}
+
+function SelectIndicator({ isSelected }: { isSelected?: boolean }) {
+  return <Text>{isSelected ? " " : " "}</Text>;
+}
+
+function SelectItem({
+  label,
+  isSelected,
+}: {
+  label: string;
+  isSelected?: boolean;
+}) {
+  return (
+    <Text
+      backgroundColor={isSelected ? "cyan" : undefined}
+      color={isSelected ? "black" : "white"}
+    >
+      {` ${label}`}
+    </Text>
+  );
+}
+
 // ── Input panels ─────────────────────────────────────────────────------------
 
 function TextInputPanel({
@@ -720,7 +750,13 @@ export default function App() {
     const items = boards.map((b) => ({ label: b.name, value: b, key: b.id }));
     content = (
       <Box flexDirection="column">
-        <SelectInput items={items} onSelect={handleBoardSelect} />
+        <SectionTitle label="Boards" />
+        <SelectInput
+          items={items}
+          onSelect={handleBoardSelect}
+          itemComponent={SelectItem}
+          indicatorComponent={SelectIndicator}
+        />
         <StatusMsg msg={status} color={statusColor} />
       </Box>
     );
@@ -777,8 +813,13 @@ export default function App() {
     content = (
       <Box flexDirection="row">
         <Box flexDirection="column" width={listWidth}>
-          <Text color="gray">Aksi</Text>
-          <SelectInput items={actions} onSelect={handleCardAction} />
+          <SectionTitle label="Aksi" />
+          <SelectInput
+            items={actions}
+            onSelect={handleCardAction}
+            itemComponent={SelectItem}
+            indicatorComponent={SelectIndicator}
+          />
           <StatusMsg msg={status} color={statusColor} />
         </Box>
         <Box flexDirection="column" width={detailWidth} marginLeft={2}>
@@ -813,8 +854,13 @@ export default function App() {
     ];
     content = (
       <Box flexDirection="column">
-        <Text color="gray">Pilih list tujuan:</Text>
-        <SelectInput items={items} onSelect={handleMoveCard} />
+        <SectionTitle label="Pilih list tujuan" />
+        <SelectInput
+          items={items}
+          onSelect={handleMoveCard}
+          itemComponent={SelectItem}
+          indicatorComponent={SelectIndicator}
+        />
       </Box>
     );
   } else if (screen === "checklists") {
@@ -838,10 +884,16 @@ export default function App() {
     ];
     content = (
       <Box flexDirection="column">
+        <SectionTitle label="Checklists" />
         {checklists.length === 0 && (
           <Text color="gray">Belum ada checklist.</Text>
         )}
-        <SelectInput items={items} onSelect={handleChecklistAction} />
+        <SelectInput
+          items={items}
+          onSelect={handleChecklistAction}
+          itemComponent={SelectItem}
+          indicatorComponent={SelectIndicator}
+        />
         <StatusMsg msg={status} color={statusColor} />
       </Box>
     );
@@ -874,7 +926,12 @@ export default function App() {
           Pilih item untuk toggle [x]/[ ], atau tambah baru:
         </Text>
         <Box marginTop={1}>
-          <SelectInput items={items} onSelect={handleCheckItemAction} />
+          <SelectInput
+            items={items}
+            onSelect={handleCheckItemAction}
+            itemComponent={SelectItem}
+            indicatorComponent={SelectIndicator}
+          />
         </Box>
         <StatusMsg msg={status} color={statusColor} />
       </Box>
@@ -884,6 +941,7 @@ export default function App() {
   } else if (screen === "comments") {
     content = (
       <Box flexDirection="column">
+        <SectionTitle label="Komentar" />
         {comments.length === 0 && <Text color="gray">Belum ada komentar.</Text>}
         {comments.map((c) => (
           <Box key={c.id} flexDirection="column" marginBottom={1}>
@@ -900,6 +958,8 @@ export default function App() {
             onSelect={(item) => {
               if (item.value === "add") setScreen("add_comment");
             }}
+            itemComponent={SelectItem}
+            indicatorComponent={SelectIndicator}
           />
         </Box>
         <StatusMsg msg={status} color={statusColor} />
