@@ -1,7 +1,7 @@
-import axios from 'axios';
-const BASE = 'https://api.trello.com/1';
-let KEY = '';
-let TOKEN = '';
+import axios from "axios";
+const BASE = "https://api.trello.com/1";
+let KEY = "";
+let TOKEN = "";
 export function setCredentials(key, token) {
     KEY = key;
     TOKEN = token;
@@ -11,19 +11,19 @@ function auth() {
 }
 export async function getBoards() {
     const res = await axios.get(`${BASE}/members/me/boards`, {
-        params: { ...auth(), filter: 'open', fields: 'name,shortUrl' },
+        params: { ...auth(), filter: "open", fields: "name,shortUrl" },
     });
     return res.data;
 }
 export async function getLists(boardId) {
     const res = await axios.get(`${BASE}/boards/${boardId}/lists`, {
-        params: { ...auth(), filter: 'open' },
+        params: { ...auth(), filter: "open" },
     });
     return res.data;
 }
 export async function getCards(listId) {
     const res = await axios.get(`${BASE}/lists/${listId}/cards`, {
-        params: { ...auth(), fields: 'name,desc,idList,due,dueComplete,shortUrl' },
+        params: { ...auth(), fields: "name,desc,idList,due,dueComplete,shortUrl" },
     });
     return res.data;
 }
@@ -35,7 +35,7 @@ export async function getCard(cardId) {
 }
 export async function createCard(listId, name, desc) {
     const res = await axios.post(`${BASE}/cards`, null, {
-        params: { ...auth(), idList: listId, name, desc: desc || '' },
+        params: { ...auth(), idList: listId, name, desc: desc || "" },
     });
     return res.data;
 }
@@ -44,6 +44,14 @@ export async function updateCard(cardId, fields) {
         params: { ...auth(), ...fields },
     });
     return res.data;
+}
+export async function archiveCard(cardId) {
+    return updateCard(cardId, { closed: true });
+}
+export async function deleteCard(cardId) {
+    await axios.delete(`${BASE}/cards/${cardId}`, {
+        params: { ...auth() },
+    });
 }
 export async function getChecklists(cardId) {
     const res = await axios.get(`${BASE}/cards/${cardId}/checklists`, {
@@ -56,6 +64,11 @@ export async function createChecklist(cardId, name) {
         params: { ...auth(), idCard: cardId, name },
     });
     return res.data;
+}
+export async function deleteChecklist(checklistId) {
+    await axios.delete(`${BASE}/checklists/${checklistId}`, {
+        params: { ...auth() },
+    });
 }
 export async function addCheckItem(checklistId, name) {
     const res = await axios.post(`${BASE}/checklists/${checklistId}/checkItems`, null, {
@@ -76,7 +89,7 @@ export async function deleteCheckItem(checklistId, checkItemId) {
 }
 export async function getComments(cardId) {
     const res = await axios.get(`${BASE}/cards/${cardId}/actions`, {
-        params: { ...auth(), filter: 'commentCard' },
+        params: { ...auth(), filter: "commentCard" },
     });
     return res.data;
 }

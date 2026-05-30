@@ -23,7 +23,14 @@ type Screen =
   | "add_checklist"
   | "add_checkitem"
   | "comments"
-  | "add_comment";
+  | "add_comment"
+  | "confirm";
+
+type ConfirmAction =
+  | "archive_card"
+  | "delete_card"
+  | "delete_checklist"
+  | "delete_checkitem";
 
 // ── helpers ─────────────────────────────────────────────────────────────────-
 
@@ -123,6 +130,39 @@ function SelectItem({
     >
       {` ${label}`}
     </Text>
+  );
+}
+
+function ConfirmPanel({
+  title,
+  message,
+  onConfirm,
+  onCancel,
+}: {
+  title: string;
+  message: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <Box flexDirection="column">
+      <SectionTitle label={title} />
+      <Text color="gray">{message}</Text>
+      <Box marginTop={1}>
+        <SelectInput
+          items={[
+            { label: "Ya", value: "yes" },
+            { label: "Batal", value: "no" },
+          ]}
+          onSelect={(item) => {
+            if (item.value === "yes") onConfirm();
+            else onCancel();
+          }}
+          itemComponent={SelectItem}
+          indicatorComponent={SelectIndicator}
+        />
+      </Box>
+    </Box>
   );
 }
 
@@ -281,6 +321,17 @@ export default function App() {
   const [listCardIndex, setListCardIndex] = useState<Record<string, number>>(
     {},
   );
+  const [highlightChecklistId, setHighlightChecklistId] = useState<
+    string | null
+  >(null);
+  const [highlightCheckItem, setHighlightCheckItem] =
+    useState<TrelloCheckItem | null>(null);
+  const [confirmState, setConfirmState] = useState<{
+    type: ConfirmAction;
+    returnScreen: Screen;
+    checklistId?: string;
+    checkItemId?: string;
+  } | null>(null);
 
   const flash = (msg: string, color = "green") => {
     setStatus(msg);
@@ -359,6 +410,10 @@ export default function App() {
     });
   }, [cardsByList, lists]);
 
+  useEffect(() => {
+    setHighlightCheckItem(null);
+  }, [selectedChecklist?.id, screen]);
+
   useInput((_input, key) => {
     if (key.escape) handleBack();
     if (_input === "q") exit();
@@ -403,11 +458,64 @@ export default function App() {
           setScreen("card_detail");
         }
       }
+      if (_input === "a" || _input === "d") {
+        const list = lists[listIndex];
+        if (!list) return;
+        const listCards = cardsByList[list.id] ?? [];
+        const index = listCardIndex[list.id] ?? 0;
+        const card = listCards[index];
+        if (!card) return;
+        setSelectedList(list);
+        setSelectedCard(card);
+        setConfirmState({
+          type: _input === "a" ? "archive_card" : "delete_card",
+          returnScreen: "lists",
+        });
+        setScreen("confirm");
+      }
+    }
+    if (screen === "card_detail" && _input === "a") {
+      setConfirmState({ type: "archive_card", returnScreen: "card_detail" });
+      setScreen("confirm");
+    }
+    if (screen === "card_detail" && _input === "d") {
+      setConfirmState({ type: "delete_card", returnScreen: "card_detail" });
+      setScreen("confirm");
+    }
+    if (screen === "checklists" && _input === "d") {
+      if (!highlightChecklistId) {
+        showError("Checklist belum dipilih.");
+        return;
+      }
+      setConfirmState({
+        type: "delete_checklist",
+        returnScreen: "checklists",
+        checklistId: highlightChecklistId,
+      });
+      setScreen("confirm");
+    }
+    if (screen === "add_checkitem" && _input === "d") {
+      if (!highlightCheckItem) {
+        showError("Item checklist belum dipilih.");
+        return;
+      }
+      setConfirmState({
+        type: "delete_checkitem",
+        returnScreen: "add_checkitem",
+        checklistId: highlightCheckItem.idChecklist,
+        checkItemId: highlightCheckItem.id,
+      });
+      setScreen("confirm");
     }
   });
 
   function handleBack() {
     clearError();
+    if (screen === "confirm" && confirmState) {
+      setConfirmState(null);
+      setScreen(confirmState.returnScreen);
+      return;
+    }
     if (screen === "boards") return exit();
     if (screen === "lists") setScreen("boards");
     else if (screen === "card_detail") setScreen("lists");
@@ -482,6 +590,12 @@ export default function App() {
     return cs;
   }
 
+  async function refreshChecklists(cardId: string) {
+    const cls = await api.getChecklists(cardId);
+    setChecklists(cls);
+    return cls;
+  }
+
   // ── Card detail actions ─────────────────────────────────────────────────---
   async function handleCardAction(item: { value: string }) {
     const action = item.value;
@@ -490,8 +604,7 @@ export default function App() {
       if (!card) return;
       startLoading();
       try {
-        const cls = await api.getChecklists(card.id);
-        setChecklists(cls);
+        await refreshChecklists(card.id);
         setLoading(false);
         setScreen("checklists");
       } catch (err: any) {
@@ -515,6 +628,12 @@ export default function App() {
       setScreen("edit_card");
     } else if (action === "move") {
       setScreen("move_card");
+    } else if (action === "archive") {
+      setConfirmState({ type: "archive_card", returnScreen: "card_detail" });
+      setScreen("confirm");
+    } else if (action === "delete") {
+      setConfirmState({ type: "delete_card", returnScreen: "card_detail" });
+      setScreen("confirm");
     }
   }
 
@@ -594,8 +713,7 @@ export default function App() {
     startLoading();
     try {
       await api.createChecklist(card.id, name.trim());
-      const cls = await api.getChecklists(card.id);
-      setChecklists(cls);
+      await refreshChecklists(card.id);
       setLoading(false);
       flash(`Checklist "${name}" dibuat.`);
       setScreen("checklists");
@@ -617,10 +735,8 @@ export default function App() {
     startLoading();
     try {
       await api.updateCheckItem(card.id, ci.id, newState);
-      const cls = await api.getChecklists(card.id);
-      setChecklists(cls);
-      const updated =
-        cls.find((c: TrelloChecklist) => c.id === checklist.id) || checklist;
+      const cls = await refreshChecklists(card.id);
+      const updated = cls.find((c) => c.id === checklist.id) || checklist;
       setSelectedChecklist(updated);
       setLoading(false);
       flash(
@@ -642,10 +758,8 @@ export default function App() {
     startLoading();
     try {
       await api.addCheckItem(checklist.id, name.trim());
-      const cls = await api.getChecklists(card.id);
-      const updated =
-        cls.find((c: TrelloChecklist) => c.id === checklist.id) || checklist;
-      setChecklists(cls);
+      const cls = await refreshChecklists(card.id);
+      const updated = cls.find((c) => c.id === checklist.id) || checklist;
       setSelectedChecklist(updated);
       setLoading(false);
       flash(`Item "${name}" ditambahkan.`);
@@ -653,6 +767,62 @@ export default function App() {
     } catch (err: any) {
       showError("Gagal menambahkan item checklist.", err?.message || "");
       setLoading(false);
+    }
+  }
+
+  async function handleConfirm() {
+    if (!confirmState) return;
+    startLoading();
+    try {
+      if (confirmState.type === "archive_card") {
+        const card = requireSelectedCard();
+        if (!card) return;
+        await api.archiveCard(card.id);
+        await refreshListCards(card.idList);
+        setSelectedCard(null);
+        setLoading(false);
+        flash("Card diarsipkan.");
+        setScreen("lists");
+      } else if (confirmState.type === "delete_card") {
+        const card = requireSelectedCard();
+        if (!card) return;
+        await api.deleteCard(card.id);
+        await refreshListCards(card.idList);
+        setSelectedCard(null);
+        setLoading(false);
+        flash("Card dihapus.");
+        setScreen("lists");
+      } else if (confirmState.type === "delete_checklist") {
+        const card = requireSelectedCard();
+        if (!card || !confirmState.checklistId) return;
+        await api.deleteChecklist(confirmState.checklistId);
+        await refreshChecklists(card.id);
+        setLoading(false);
+        flash("Checklist dihapus.");
+        setScreen("checklists");
+      } else if (confirmState.type === "delete_checkitem") {
+        const card = requireSelectedCard();
+        if (!card || !confirmState.checklistId || !confirmState.checkItemId)
+          return;
+        await api.deleteCheckItem(
+          confirmState.checklistId,
+          confirmState.checkItemId,
+        );
+        const cls = await refreshChecklists(card.id);
+        if (selectedChecklist) {
+          const updated =
+            cls.find((c) => c.id === selectedChecklist.id) || null;
+          setSelectedChecklist(updated);
+        }
+        setLoading(false);
+        flash("Item checklist dihapus.");
+        setScreen("add_checkitem");
+      }
+      setConfirmState(null);
+    } catch (err: any) {
+      showError("Aksi gagal dijalankan.", err?.message || "");
+      setLoading(false);
+      setScreen(confirmState.returnScreen);
     }
   }
 
@@ -708,6 +878,8 @@ export default function App() {
         return "Komentar";
       case "add_comment":
         return "Tambah Komentar";
+      case "confirm":
+        return "Konfirmasi";
       default:
         return "Trello CLI";
     }
@@ -722,19 +894,45 @@ export default function App() {
           "Left/Right: list",
           "Up/Down: card",
           "Enter: buka",
+          "A: arsip",
+          "D: hapus",
           "Esc: back",
           "Q: quit",
         ];
       case "card_detail":
+        return [
+          "Up/Down: navigasi",
+          "Enter: pilih",
+          "A: arsip",
+          "D: hapus",
+          "Esc: back",
+          "Q: quit",
+        ];
       case "checklists":
+        return [
+          "Up/Down: navigasi",
+          "Enter: pilih",
+          "D: hapus",
+          "Esc: back",
+          "Q: quit",
+        ];
       case "comments":
+        return ["Up/Down: navigasi", "Enter: pilih", "Esc: back", "Q: quit"];
+      case "confirm":
         return ["Up/Down: navigasi", "Enter: pilih", "Esc: back", "Q: quit"];
       case "create_card":
       case "edit_card":
       case "add_checklist":
-      case "add_checkitem":
       case "add_comment":
         return ["Enter: simpan", "Esc: back", "Q: quit"];
+      case "add_checkitem":
+        return [
+          "Up/Down: navigasi",
+          "Enter: pilih",
+          "D: hapus",
+          "Esc: back",
+          "Q: quit",
+        ];
       case "move_card":
         return ["Up/Down: pilih", "Enter: pindah", "Esc: back", "Q: quit"];
       default:
@@ -891,6 +1089,11 @@ export default function App() {
         <SelectInput
           items={items}
           onSelect={handleChecklistAction}
+          onHighlight={(item) => {
+            const value = item.value as TrelloChecklist | string;
+            if (typeof value === "string") setHighlightChecklistId(null);
+            else setHighlightChecklistId(value.id);
+          }}
           itemComponent={SelectItem}
           indicatorComponent={SelectIndicator}
         />
@@ -929,6 +1132,11 @@ export default function App() {
           <SelectInput
             items={items}
             onSelect={handleCheckItemAction}
+            onHighlight={(item) => {
+              const value = item.value as TrelloCheckItem | "add";
+              if (value === "add") setHighlightCheckItem(null);
+              else setHighlightCheckItem(value);
+            }}
             itemComponent={SelectItem}
             indicatorComponent={SelectIndicator}
           />
@@ -938,6 +1146,30 @@ export default function App() {
     );
   } else if (screen === "add_checkitem" && !selectedChecklist) {
     content = <Loading label="Loading checklist..." />;
+  } else if (screen === "confirm" && confirmState) {
+    const titleMap: Record<ConfirmAction, string> = {
+      archive_card: "Arsipkan card",
+      delete_card: "Hapus card",
+      delete_checklist: "Hapus checklist",
+      delete_checkitem: "Hapus item",
+    };
+    const messageMap: Record<ConfirmAction, string> = {
+      archive_card: "Card akan dipindahkan ke arsip.",
+      delete_card: "Card akan dihapus permanen.",
+      delete_checklist: "Checklist akan dihapus permanen.",
+      delete_checkitem: "Item checklist akan dihapus permanen.",
+    };
+    content = (
+      <ConfirmPanel
+        title={titleMap[confirmState.type]}
+        message={messageMap[confirmState.type]}
+        onConfirm={handleConfirm}
+        onCancel={() => {
+          setConfirmState(null);
+          setScreen(confirmState.returnScreen);
+        }}
+      />
+    );
   } else if (screen === "comments") {
     content = (
       <Box flexDirection="column">

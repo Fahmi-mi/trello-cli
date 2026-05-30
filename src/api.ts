@@ -1,6 +1,6 @@
-import axios from 'axios';
+import axios from "axios";
 
-const BASE = 'https://api.trello.com/1';
+const BASE = "https://api.trello.com/1";
 
 export interface TrelloBoard {
   id: string;
@@ -32,7 +32,7 @@ export interface TrelloChecklist {
 export interface TrelloCheckItem {
   id: string;
   name: string;
-  state: 'incomplete' | 'complete';
+  state: "incomplete" | "complete";
   idChecklist: string;
 }
 
@@ -43,8 +43,8 @@ export interface TrelloComment {
   date: string;
 }
 
-let KEY = '';
-let TOKEN = '';
+let KEY = "";
+let TOKEN = "";
 
 export function setCredentials(key: string, token: string) {
   KEY = key;
@@ -57,21 +57,21 @@ function auth() {
 
 export async function getBoards(): Promise<TrelloBoard[]> {
   const res = await axios.get(`${BASE}/members/me/boards`, {
-    params: { ...auth(), filter: 'open', fields: 'name,shortUrl' },
+    params: { ...auth(), filter: "open", fields: "name,shortUrl" },
   });
   return res.data;
 }
 
 export async function getLists(boardId: string): Promise<TrelloList[]> {
   const res = await axios.get(`${BASE}/boards/${boardId}/lists`, {
-    params: { ...auth(), filter: 'open' },
+    params: { ...auth(), filter: "open" },
   });
   return res.data;
 }
 
 export async function getCards(listId: string): Promise<TrelloCard[]> {
   const res = await axios.get(`${BASE}/lists/${listId}/cards`, {
-    params: { ...auth(), fields: 'name,desc,idList,due,dueComplete,shortUrl' },
+    params: { ...auth(), fields: "name,desc,idList,due,dueComplete,shortUrl" },
   });
   return res.data;
 }
@@ -83,61 +83,112 @@ export async function getCard(cardId: string): Promise<TrelloCard> {
   return res.data;
 }
 
-export async function createCard(listId: string, name: string, desc?: string): Promise<TrelloCard> {
+export async function createCard(
+  listId: string,
+  name: string,
+  desc?: string,
+): Promise<TrelloCard> {
   const res = await axios.post(`${BASE}/cards`, null, {
-    params: { ...auth(), idList: listId, name, desc: desc || '' },
+    params: { ...auth(), idList: listId, name, desc: desc || "" },
   });
   return res.data;
 }
 
-export async function updateCard(cardId: string, fields: Partial<{ name: string; desc: string; idList: string; due: string | null }>): Promise<TrelloCard> {
+export async function updateCard(
+  cardId: string,
+  fields: Partial<{
+    name: string;
+    desc: string;
+    idList: string;
+    due: string | null;
+    closed: boolean;
+  }>,
+): Promise<TrelloCard> {
   const res = await axios.put(`${BASE}/cards/${cardId}`, null, {
     params: { ...auth(), ...fields },
   });
   return res.data;
 }
 
-export async function getChecklists(cardId: string): Promise<TrelloChecklist[]> {
+export async function archiveCard(cardId: string): Promise<TrelloCard> {
+  return updateCard(cardId, { closed: true });
+}
+
+export async function deleteCard(cardId: string): Promise<void> {
+  await axios.delete(`${BASE}/cards/${cardId}`, {
+    params: { ...auth() },
+  });
+}
+
+export async function getChecklists(
+  cardId: string,
+): Promise<TrelloChecklist[]> {
   const res = await axios.get(`${BASE}/cards/${cardId}/checklists`, {
     params: { ...auth() },
   });
   return res.data;
 }
 
-export async function createChecklist(cardId: string, name: string): Promise<TrelloChecklist> {
+export async function createChecklist(
+  cardId: string,
+  name: string,
+): Promise<TrelloChecklist> {
   const res = await axios.post(`${BASE}/checklists`, null, {
     params: { ...auth(), idCard: cardId, name },
   });
   return res.data;
 }
 
-export async function addCheckItem(checklistId: string, name: string): Promise<TrelloCheckItem> {
-  const res = await axios.post(`${BASE}/checklists/${checklistId}/checkItems`, null, {
-    params: { ...auth(), name },
+export async function deleteChecklist(checklistId: string): Promise<void> {
+  await axios.delete(`${BASE}/checklists/${checklistId}`, {
+    params: { ...auth() },
   });
+}
+
+export async function addCheckItem(
+  checklistId: string,
+  name: string,
+): Promise<TrelloCheckItem> {
+  const res = await axios.post(
+    `${BASE}/checklists/${checklistId}/checkItems`,
+    null,
+    {
+      params: { ...auth(), name },
+    },
+  );
   return res.data;
 }
 
 export async function updateCheckItem(
   cardId: string,
   checkItemId: string,
-  state: 'complete' | 'incomplete'
+  state: "complete" | "incomplete",
 ): Promise<TrelloCheckItem> {
-  const res = await axios.put(`${BASE}/cards/${cardId}/checkItem/${checkItemId}`, null, {
-    params: { ...auth(), state },
-  });
+  const res = await axios.put(
+    `${BASE}/cards/${cardId}/checkItem/${checkItemId}`,
+    null,
+    {
+      params: { ...auth(), state },
+    },
+  );
   return res.data;
 }
 
-export async function deleteCheckItem(checklistId: string, checkItemId: string): Promise<void> {
-  await axios.delete(`${BASE}/checklists/${checklistId}/checkItems/${checkItemId}`, {
-    params: { ...auth() },
-  });
+export async function deleteCheckItem(
+  checklistId: string,
+  checkItemId: string,
+): Promise<void> {
+  await axios.delete(
+    `${BASE}/checklists/${checklistId}/checkItems/${checkItemId}`,
+    {
+      params: { ...auth() },
+    },
+  );
 }
 
 export async function getComments(cardId: string): Promise<TrelloComment[]> {
   const res = await axios.get(`${BASE}/cards/${cardId}/actions`, {
-    params: { ...auth(), filter: 'commentCard' },
+    params: { ...auth(), filter: "commentCard" },
   });
   return res.data;
 }

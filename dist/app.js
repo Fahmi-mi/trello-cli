@@ -47,6 +47,17 @@ function SelectIndicator({ isSelected }) {
 function SelectItem({ label, isSelected, }) {
     return (_jsx(Text, { backgroundColor: isSelected ? "cyan" : undefined, color: isSelected ? "black" : "white", children: ` ${label}` }));
 }
+function ConfirmPanel({ title, message, onConfirm, onCancel, }) {
+    return (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: title }), _jsx(Text, { color: "gray", children: message }), _jsx(Box, { marginTop: 1, children: _jsx(SelectInput, { items: [
+                        { label: "Ya", value: "yes" },
+                        { label: "Batal", value: "no" },
+                    ], onSelect: (item) => {
+                        if (item.value === "yes")
+                            onConfirm();
+                        else
+                            onCancel();
+                    }, itemComponent: SelectItem, indicatorComponent: SelectIndicator }) })] }));
+}
 // ── Input panels ─────────────────────────────────────────────────------------
 function TextInputPanel({ prompt, onSubmit, initialValue = "", }) {
     const [value, setValue] = useState(initialValue);
@@ -100,6 +111,9 @@ export default function App() {
     const [selectedChecklist, setSelectedChecklist] = useState(null);
     const [listIndex, setListIndex] = useState(0);
     const [listCardIndex, setListCardIndex] = useState({});
+    const [highlightChecklistId, setHighlightChecklistId] = useState(null);
+    const [highlightCheckItem, setHighlightCheckItem] = useState(null);
+    const [confirmState, setConfirmState] = useState(null);
     const flash = (msg, color = "green") => {
         setStatus(msg);
         setStatusColor(color);
@@ -168,6 +182,9 @@ export default function App() {
             return next;
         });
     }, [cardsByList, lists]);
+    useEffect(() => {
+        setHighlightCheckItem(null);
+    }, [selectedChecklist?.id, screen]);
     useInput((_input, key) => {
         if (key.escape)
             handleBack();
@@ -218,10 +235,65 @@ export default function App() {
                     setScreen("card_detail");
                 }
             }
+            if (_input === "a" || _input === "d") {
+                const list = lists[listIndex];
+                if (!list)
+                    return;
+                const listCards = cardsByList[list.id] ?? [];
+                const index = listCardIndex[list.id] ?? 0;
+                const card = listCards[index];
+                if (!card)
+                    return;
+                setSelectedList(list);
+                setSelectedCard(card);
+                setConfirmState({
+                    type: _input === "a" ? "archive_card" : "delete_card",
+                    returnScreen: "lists",
+                });
+                setScreen("confirm");
+            }
+        }
+        if (screen === "card_detail" && _input === "a") {
+            setConfirmState({ type: "archive_card", returnScreen: "card_detail" });
+            setScreen("confirm");
+        }
+        if (screen === "card_detail" && _input === "d") {
+            setConfirmState({ type: "delete_card", returnScreen: "card_detail" });
+            setScreen("confirm");
+        }
+        if (screen === "checklists" && _input === "d") {
+            if (!highlightChecklistId) {
+                showError("Checklist belum dipilih.");
+                return;
+            }
+            setConfirmState({
+                type: "delete_checklist",
+                returnScreen: "checklists",
+                checklistId: highlightChecklistId,
+            });
+            setScreen("confirm");
+        }
+        if (screen === "add_checkitem" && _input === "d") {
+            if (!highlightCheckItem) {
+                showError("Item checklist belum dipilih.");
+                return;
+            }
+            setConfirmState({
+                type: "delete_checkitem",
+                returnScreen: "add_checkitem",
+                checklistId: highlightCheckItem.idChecklist,
+                checkItemId: highlightCheckItem.id,
+            });
+            setScreen("confirm");
         }
     });
     function handleBack() {
         clearError();
+        if (screen === "confirm" && confirmState) {
+            setConfirmState(null);
+            setScreen(confirmState.returnScreen);
+            return;
+        }
         if (screen === "boards")
             return exit();
         if (screen === "lists")
@@ -301,6 +373,11 @@ export default function App() {
         setCardsByList((prev) => ({ ...prev, [listId]: cs }));
         return cs;
     }
+    async function refreshChecklists(cardId) {
+        const cls = await api.getChecklists(cardId);
+        setChecklists(cls);
+        return cls;
+    }
     // ── Card detail actions ─────────────────────────────────────────────────---
     async function handleCardAction(item) {
         const action = item.value;
@@ -310,8 +387,7 @@ export default function App() {
                 return;
             startLoading();
             try {
-                const cls = await api.getChecklists(card.id);
-                setChecklists(cls);
+                await refreshChecklists(card.id);
                 setLoading(false);
                 setScreen("checklists");
             }
@@ -341,6 +417,14 @@ export default function App() {
         }
         else if (action === "move") {
             setScreen("move_card");
+        }
+        else if (action === "archive") {
+            setConfirmState({ type: "archive_card", returnScreen: "card_detail" });
+            setScreen("confirm");
+        }
+        else if (action === "delete") {
+            setConfirmState({ type: "delete_card", returnScreen: "card_detail" });
+            setScreen("confirm");
         }
     }
     // ── Create card ─────────────────────────────────────────────────----------
@@ -424,8 +508,7 @@ export default function App() {
         startLoading();
         try {
             await api.createChecklist(card.id, name.trim());
-            const cls = await api.getChecklists(card.id);
-            setChecklists(cls);
+            await refreshChecklists(card.id);
             setLoading(false);
             flash(`Checklist "${name}" dibuat.`);
             setScreen("checklists");
@@ -447,8 +530,7 @@ export default function App() {
         startLoading();
         try {
             await api.updateCheckItem(card.id, ci.id, newState);
-            const cls = await api.getChecklists(card.id);
-            setChecklists(cls);
+            const cls = await refreshChecklists(card.id);
             const updated = cls.find((c) => c.id === checklist.id) || checklist;
             setSelectedChecklist(updated);
             setLoading(false);
@@ -471,9 +553,8 @@ export default function App() {
         startLoading();
         try {
             await api.addCheckItem(checklist.id, name.trim());
-            const cls = await api.getChecklists(card.id);
+            const cls = await refreshChecklists(card.id);
             const updated = cls.find((c) => c.id === checklist.id) || checklist;
-            setChecklists(cls);
             setSelectedChecklist(updated);
             setLoading(false);
             flash(`Item "${name}" ditambahkan.`);
@@ -482,6 +563,65 @@ export default function App() {
         catch (err) {
             showError("Gagal menambahkan item checklist.", err?.message || "");
             setLoading(false);
+        }
+    }
+    async function handleConfirm() {
+        if (!confirmState)
+            return;
+        startLoading();
+        try {
+            if (confirmState.type === "archive_card") {
+                const card = requireSelectedCard();
+                if (!card)
+                    return;
+                await api.archiveCard(card.id);
+                await refreshListCards(card.idList);
+                setSelectedCard(null);
+                setLoading(false);
+                flash("Card diarsipkan.");
+                setScreen("lists");
+            }
+            else if (confirmState.type === "delete_card") {
+                const card = requireSelectedCard();
+                if (!card)
+                    return;
+                await api.deleteCard(card.id);
+                await refreshListCards(card.idList);
+                setSelectedCard(null);
+                setLoading(false);
+                flash("Card dihapus.");
+                setScreen("lists");
+            }
+            else if (confirmState.type === "delete_checklist") {
+                const card = requireSelectedCard();
+                if (!card || !confirmState.checklistId)
+                    return;
+                await api.deleteChecklist(confirmState.checklistId);
+                await refreshChecklists(card.id);
+                setLoading(false);
+                flash("Checklist dihapus.");
+                setScreen("checklists");
+            }
+            else if (confirmState.type === "delete_checkitem") {
+                const card = requireSelectedCard();
+                if (!card || !confirmState.checklistId || !confirmState.checkItemId)
+                    return;
+                await api.deleteCheckItem(confirmState.checklistId, confirmState.checkItemId);
+                const cls = await refreshChecklists(card.id);
+                if (selectedChecklist) {
+                    const updated = cls.find((c) => c.id === selectedChecklist.id) || null;
+                    setSelectedChecklist(updated);
+                }
+                setLoading(false);
+                flash("Item checklist dihapus.");
+                setScreen("add_checkitem");
+            }
+            setConfirmState(null);
+        }
+        catch (err) {
+            showError("Aksi gagal dijalankan.", err?.message || "");
+            setLoading(false);
+            setScreen(confirmState.returnScreen);
         }
     }
     // ── Comments ─────────────────────────────────────────────────--------------
@@ -536,6 +676,8 @@ export default function App() {
                 return "Komentar";
             case "add_comment":
                 return "Tambah Komentar";
+            case "confirm":
+                return "Konfirmasi";
             default:
                 return "Trello CLI";
         }
@@ -549,19 +691,45 @@ export default function App() {
                     "Left/Right: list",
                     "Up/Down: card",
                     "Enter: buka",
+                    "A: arsip",
+                    "D: hapus",
                     "Esc: back",
                     "Q: quit",
                 ];
             case "card_detail":
+                return [
+                    "Up/Down: navigasi",
+                    "Enter: pilih",
+                    "A: arsip",
+                    "D: hapus",
+                    "Esc: back",
+                    "Q: quit",
+                ];
             case "checklists":
+                return [
+                    "Up/Down: navigasi",
+                    "Enter: pilih",
+                    "D: hapus",
+                    "Esc: back",
+                    "Q: quit",
+                ];
             case "comments":
+                return ["Up/Down: navigasi", "Enter: pilih", "Esc: back", "Q: quit"];
+            case "confirm":
                 return ["Up/Down: navigasi", "Enter: pilih", "Esc: back", "Q: quit"];
             case "create_card":
             case "edit_card":
             case "add_checklist":
-            case "add_checkitem":
             case "add_comment":
                 return ["Enter: simpan", "Esc: back", "Q: quit"];
+            case "add_checkitem":
+                return [
+                    "Up/Down: navigasi",
+                    "Enter: pilih",
+                    "D: hapus",
+                    "Esc: back",
+                    "Q: quit",
+                ];
             case "move_card":
                 return ["Up/Down: pilih", "Enter: pindah", "Esc: back", "Q: quit"];
             default:
@@ -638,7 +806,13 @@ export default function App() {
                 key: "add_checklist",
             },
         ];
-        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Checklists" }), checklists.length === 0 && (_jsx(Text, { color: "gray", children: "Belum ada checklist." })), _jsx(SelectInput, { items: items, onSelect: handleChecklistAction, itemComponent: SelectItem, indicatorComponent: SelectIndicator }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
+        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Checklists" }), checklists.length === 0 && (_jsx(Text, { color: "gray", children: "Belum ada checklist." })), _jsx(SelectInput, { items: items, onSelect: handleChecklistAction, onHighlight: (item) => {
+                        const value = item.value;
+                        if (typeof value === "string")
+                            setHighlightChecklistId(null);
+                        else
+                            setHighlightChecklistId(value.id);
+                    }, itemComponent: SelectItem, indicatorComponent: SelectIndicator }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
     }
     else if (screen === "add_checklist") {
         content = (_jsx(TextInputPanel, { prompt: "Nama checklist:", onSubmit: handleCreateChecklist }));
@@ -654,10 +828,34 @@ export default function App() {
         ];
         const total = selectedChecklist.checkItems.length;
         const done = selectedChecklist.checkItems.filter((i) => i.state === "complete").length;
-        content = (_jsxs(Box, { flexDirection: "column", children: [_jsxs(Text, { color: "gray", children: [selectedChecklist.name, " [", done, "/", total, "]"] }), _jsx(Text, { color: "gray", children: "Pilih item untuk toggle [x]/[ ], atau tambah baru:" }), _jsx(Box, { marginTop: 1, children: _jsx(SelectInput, { items: items, onSelect: handleCheckItemAction, itemComponent: SelectItem, indicatorComponent: SelectIndicator }) }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
+        content = (_jsxs(Box, { flexDirection: "column", children: [_jsxs(Text, { color: "gray", children: [selectedChecklist.name, " [", done, "/", total, "]"] }), _jsx(Text, { color: "gray", children: "Pilih item untuk toggle [x]/[ ], atau tambah baru:" }), _jsx(Box, { marginTop: 1, children: _jsx(SelectInput, { items: items, onSelect: handleCheckItemAction, onHighlight: (item) => {
+                            const value = item.value;
+                            if (value === "add")
+                                setHighlightCheckItem(null);
+                            else
+                                setHighlightCheckItem(value);
+                        }, itemComponent: SelectItem, indicatorComponent: SelectIndicator }) }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
     }
     else if (screen === "add_checkitem" && !selectedChecklist) {
         content = _jsx(Loading, { label: "Loading checklist..." });
+    }
+    else if (screen === "confirm" && confirmState) {
+        const titleMap = {
+            archive_card: "Arsipkan card",
+            delete_card: "Hapus card",
+            delete_checklist: "Hapus checklist",
+            delete_checkitem: "Hapus item",
+        };
+        const messageMap = {
+            archive_card: "Card akan dipindahkan ke arsip.",
+            delete_card: "Card akan dihapus permanen.",
+            delete_checklist: "Checklist akan dihapus permanen.",
+            delete_checkitem: "Item checklist akan dihapus permanen.",
+        };
+        content = (_jsx(ConfirmPanel, { title: titleMap[confirmState.type], message: messageMap[confirmState.type], onConfirm: handleConfirm, onCancel: () => {
+                setConfirmState(null);
+                setScreen(confirmState.returnScreen);
+            } }));
     }
     else if (screen === "comments") {
         content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Komentar" }), comments.length === 0 && _jsx(Text, { color: "gray", children: "Belum ada komentar." }), comments.map((c) => (_jsxs(Box, { flexDirection: "column", marginBottom: 1, children: [_jsx(Text, { color: "cyan", bold: true, children: c.memberCreator.fullName }), _jsx(Text, { color: "gray", children: new Date(c.date).toLocaleString("id") }), _jsx(Text, { children: c.data.text })] }, c.id))), _jsx(Box, { marginTop: 1, flexDirection: "column", children: _jsx(SelectInput, { items: [{ label: "Tambah komentar", value: "add" }], onSelect: (item) => {
