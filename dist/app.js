@@ -18,6 +18,42 @@ function truncate(text, width) {
         return text.slice(0, width);
     return text.slice(0, width - 3) + "...";
 }
+function wrapText(text, width) {
+    if (width <= 0)
+        return [""];
+    const lines = [];
+    const paragraphs = text.split("\n");
+    paragraphs.forEach((paragraph, idx) => {
+        const words = paragraph.split(/\s+/).filter(Boolean);
+        let line = "";
+        if (words.length === 0) {
+            lines.push("");
+        }
+        else {
+            words.forEach((word) => {
+                if (line.length === 0) {
+                    line = word;
+                }
+                else if (line.length + 1 + word.length <= width) {
+                    line = `${line} ${word}`;
+                }
+                else {
+                    lines.push(line);
+                    line = word;
+                }
+                while (line.length > width) {
+                    lines.push(line.slice(0, width));
+                    line = line.slice(width);
+                }
+            });
+            if (line.length > 0)
+                lines.push(line);
+        }
+        if (idx < paragraphs.length - 1)
+            lines.push("");
+    });
+    return lines.length > 0 ? lines : [""];
+}
 function HeaderBar({ title, width }) {
     const line = "-".repeat(Math.max(0, width));
     return (_jsxs(Box, { flexDirection: "column", width: width, children: [_jsx(Text, { color: "blue", children: line }), _jsxs(Box, { children: [_jsx(Text, { color: "cyan", bold: true, children: "Trello CLI" }), _jsxs(Text, { color: "white", children: [" ", title] })] }), _jsx(Text, { color: "blue", children: line })] }));
@@ -82,11 +118,13 @@ function ListColumn({ list, cards, selectedIndex, width, height, isActive, }) {
 function VerticalDivider({ height }) {
     return (_jsx(Box, { flexDirection: "column", width: 1, height: height, children: Array.from({ length: height }).map((_, index) => (_jsx(Text, { color: "blue", children: "|" }, index))) }));
 }
-function CardDetailPanel({ card, width, }) {
+function CardDetailPanel({ card, width, height, }) {
     if (!card) {
         return _jsx(Text, { color: "white", children: "Pilih card untuk melihat detail." });
     }
-    return (_jsxs(Box, { flexDirection: "column", width: width, children: [_jsx(Text, { color: "cyan", bold: true, children: "Detail Card" }), _jsx(Text, { color: "white", bold: true, children: truncate(card.name, width) }), card.desc ? (_jsx(Text, { color: "white", children: truncate(card.desc, width) })) : (_jsx(Text, { color: "white", children: "(Tanpa deskripsi)" })), card.due ? (_jsxs(Text, { color: card.dueComplete ? "green" : "red", children: ["Due: ", new Date(card.due).toLocaleDateString("id"), card.dueComplete ? " (done)" : ""] })) : (_jsx(Text, { color: "white", children: "Due: -" })), _jsx(Text, { color: "blue", children: card.shortUrl })] }));
+    const descText = card.desc?.trim() || "(Tanpa deskripsi)";
+    const descPreview = truncate(descText, width);
+    return (_jsxs(Box, { flexDirection: "column", width: width, children: [_jsx(Text, { color: "cyan", bold: true, children: "Detail Card" }), _jsx(Text, { color: "white", bold: true, children: truncate(card.name, width) }), _jsx(Text, { color: "white", children: descPreview }), card.due ? (_jsxs(Text, { color: card.dueComplete ? "green" : "red", children: ["Due: ", new Date(card.due).toLocaleDateString("id"), card.dueComplete ? " (done)" : ""] })) : (_jsx(Text, { color: "white", children: "Due: -" })), _jsx(Text, { color: "blue", children: card.shortUrl })] }));
 }
 // ── App ─────────────────────────────────────────────────────────────────-----
 export default function App() {
@@ -113,6 +151,9 @@ export default function App() {
     const [selectedChecklist, setSelectedChecklist] = useState(null);
     const [listIndex, setListIndex] = useState(0);
     const [listCardIndex, setListCardIndex] = useState({});
+    const [descScroll, setDescScroll] = useState(0);
+    const [descDraft, setDescDraft] = useState("");
+    const [blinkOn, setBlinkOn] = useState(true);
     const [highlightChecklistId, setHighlightChecklistId] = useState(null);
     const [highlightCheckItem, setHighlightCheckItem] = useState(null);
     const [highlightArchivedCard, setHighlightArchivedCard] = useState(null);
@@ -201,6 +242,25 @@ export default function App() {
         }
         setHighlightArchivedCard(archivedCards[0] ?? null);
     }, [archivedCards, screen]);
+    useEffect(() => {
+        if (screen !== "view_desc")
+            return;
+        setDescScroll(0);
+    }, [screen, selectedCard?.id]);
+    useEffect(() => {
+        if (screen !== "edit_desc")
+            return;
+        setDescDraft(selectedCard?.desc || "");
+        setDescScroll(0);
+    }, [screen, selectedCard?.id]);
+    useEffect(() => {
+        if (screen !== "edit_desc")
+            return;
+        const id = setInterval(() => {
+            setBlinkOn((current) => !current);
+        }, 500);
+        return () => clearInterval(id);
+    }, [screen]);
     useInput((_input, key) => {
         if (key.escape)
             handleBack();
@@ -333,6 +393,62 @@ export default function App() {
             });
             setScreen("confirm");
         }
+        if (screen === "view_desc") {
+            const viewWidth = Math.max(20, (stdout?.columns ?? 80) - 4);
+            const viewHeight = Math.max(1, Math.max(10, rows) - 3 - 2 - 2 - 3);
+            const desc = selectedCard?.desc?.trim() || "(Tanpa deskripsi)";
+            const lines = wrapText(desc, viewWidth);
+            const maxStart = Math.max(0, lines.length - viewHeight);
+            if (key.upArrow) {
+                setDescScroll((current) => Math.max(0, current - 1));
+            }
+            if (key.downArrow) {
+                setDescScroll((current) => Math.min(maxStart, current + 1));
+            }
+        }
+        if (screen === "edit_desc") {
+            const viewWidth = Math.max(20, (stdout?.columns ?? 80) - 4);
+            const viewHeight = Math.max(1, Math.max(10, rows) - 3 - 2 - 2 - 4);
+            const lines = wrapText(descDraft || "(Kosong)", viewWidth);
+            const maxStart = Math.max(0, lines.length - viewHeight);
+            if (key.ctrl && _input === "s") {
+                handleEditDescription(descDraft);
+                return;
+            }
+            if (key.upArrow) {
+                setDescScroll((current) => Math.max(0, current - 1));
+                return;
+            }
+            if (key.downArrow) {
+                setDescScroll((current) => Math.min(maxStart, current + 1));
+                return;
+            }
+            if (key.return) {
+                const nextDraft = `${descDraft}\n`;
+                setDescDraft(nextDraft);
+                const nextLines = wrapText(nextDraft, viewWidth);
+                const nextMax = Math.max(0, nextLines.length - viewHeight);
+                setDescScroll(nextMax);
+                return;
+            }
+            if (key.backspace || key.delete) {
+                if (descDraft.length === 0)
+                    return;
+                const nextDraft = descDraft.slice(0, -1);
+                setDescDraft(nextDraft);
+                const nextLines = wrapText(nextDraft || "(Kosong)", viewWidth);
+                const nextMax = Math.max(0, nextLines.length - viewHeight);
+                setDescScroll(Math.min(descScroll, nextMax));
+                return;
+            }
+            if (_input && _input.length === 1 && !key.ctrl && !key.meta) {
+                const nextDraft = `${descDraft}${_input}`;
+                setDescDraft(nextDraft);
+                const nextLines = wrapText(nextDraft, viewWidth);
+                const nextMax = Math.max(0, nextLines.length - viewHeight);
+                setDescScroll(nextMax);
+            }
+        }
     });
     function handleBack() {
         clearError();
@@ -362,6 +478,10 @@ export default function App() {
         else if (screen === "create_card")
             setScreen("lists");
         else if (screen === "edit_card")
+            setScreen("card_detail");
+        else if (screen === "edit_desc")
+            setScreen("card_detail");
+        else if (screen === "view_desc")
             setScreen("card_detail");
         else if (screen === "move_card")
             setScreen("card_detail");
@@ -469,6 +589,16 @@ export default function App() {
         else if (action === "edit") {
             setScreen("edit_card");
         }
+        else if (action === "edit_desc") {
+            setScreen("edit_desc");
+        }
+        else if (action === "delete_desc") {
+            setConfirmState({ type: "delete_desc", returnScreen: "card_detail" });
+            setScreen("confirm");
+        }
+        else if (action === "view_desc") {
+            setScreen("view_desc");
+        }
         else if (action === "move") {
             setScreen("move_card");
         }
@@ -519,6 +649,26 @@ export default function App() {
         }
         catch (err) {
             showError("Gagal mengubah nama card.", err?.message || "");
+            setLoading(false);
+        }
+    }
+    async function handleEditDescription(newDesc) {
+        const card = requireSelectedCard();
+        if (!card)
+            return;
+        startLoading();
+        try {
+            const updated = await api.updateCard(card.id, {
+                desc: newDesc.trim(),
+            });
+            setSelectedCard(updated);
+            await refreshListCards(updated.idList);
+            setLoading(false);
+            flash("Deskripsi diperbarui.");
+            setScreen("card_detail");
+        }
+        catch (err) {
+            showError("Gagal mengubah deskripsi card.", err?.message || "");
             setLoading(false);
         }
     }
@@ -665,6 +815,17 @@ export default function App() {
                     ? "archived_cards"
                     : "lists");
             }
+            else if (confirmState.type === "delete_desc") {
+                const card = requireSelectedCard();
+                if (!card)
+                    return;
+                const updated = await api.updateCard(card.id, { desc: "" });
+                setSelectedCard(updated);
+                await refreshListCards(updated.idList);
+                setLoading(false);
+                flash("Deskripsi dihapus.");
+                setScreen("card_detail");
+            }
             else if (confirmState.type === "delete_checklist") {
                 const card = requireSelectedCard();
                 if (!card || !confirmState.checklistId)
@@ -739,6 +900,10 @@ export default function App() {
                 return "Buat Card Baru";
             case "edit_card":
                 return "Edit Card";
+            case "edit_desc":
+                return "Edit Deskripsi";
+            case "view_desc":
+                return "Deskripsi";
             case "move_card":
                 return "Pindahkan Card";
             case "checklists":
@@ -800,6 +965,16 @@ export default function App() {
                 ];
             case "comments":
                 return ["Up/Down: navigasi", "Enter: pilih", "Esc: back", "Q: quit"];
+            case "view_desc":
+                return ["Up/Down: scroll", "Esc: back", "Q: quit"];
+            case "edit_desc":
+                return [
+                    "Ctrl+S: simpan",
+                    "Enter: baris baru",
+                    "Up/Down: scroll",
+                    "Esc: back",
+                    "Q: quit",
+                ];
             case "confirm":
                 return ["Up/Down: navigasi", "Enter: pilih", "Esc: back", "Q: quit"];
             case "create_card":
@@ -846,21 +1021,52 @@ export default function App() {
             }) }));
     }
     else if (screen === "card_detail" && selectedCard) {
+        const descLabel = selectedCard.desc?.trim()
+            ? "Edit deskripsi"
+            : "Tambah deskripsi";
         const actions = [
+            { label: "Edit nama", value: "edit" },
+            { label: "Lihat deskripsi", value: "view_desc" },
+            { label: descLabel, value: "edit_desc" },
+            { label: "Hapus deskripsi", value: "delete_desc" },
             { label: "Checklists", value: "checklists" },
             { label: "Komentar", value: "comments" },
-            { label: "Edit nama", value: "edit" },
             { label: "Pindahkan", value: "move" },
         ];
         const listWidth = Math.max(20, Math.floor(contentWidth * 0.45));
         const detailWidth = Math.max(20, contentWidth - listWidth - 2);
-        content = (_jsxs(Box, { flexDirection: "row", children: [_jsxs(Box, { flexDirection: "column", width: listWidth, children: [_jsx(SectionTitle, { label: "Aksi" }), _jsx(SelectInput, { items: actions, onSelect: handleCardAction, itemComponent: SelectItem, indicatorComponent: SelectIndicator }), _jsx(StatusMsg, { msg: status, color: statusColor })] }), _jsx(Box, { flexDirection: "column", width: detailWidth, marginLeft: 2, children: _jsx(CardDetailPanel, { card: selectedCard, width: detailWidth }) })] }));
+        content = (_jsxs(Box, { flexDirection: "row", children: [_jsxs(Box, { flexDirection: "column", width: listWidth, children: [_jsx(SectionTitle, { label: "Aksi" }), _jsx(SelectInput, { items: actions, onSelect: handleCardAction, itemComponent: SelectItem, indicatorComponent: SelectIndicator }), _jsx(StatusMsg, { msg: status, color: statusColor })] }), _jsx(Box, { flexDirection: "column", width: detailWidth, marginLeft: 2, children: _jsx(CardDetailPanel, { card: selectedCard, width: detailWidth, height: contentHeight }) })] }));
     }
     else if (screen === "create_card") {
         content = (_jsx(TextInputPanel, { prompt: `Nama card baru di "${selectedList?.name}":`, onSubmit: handleCreateCard }));
     }
     else if (screen === "edit_card" && selectedCard) {
         content = (_jsx(TextInputPanel, { prompt: "Nama baru:", onSubmit: handleEditCard, initialValue: selectedCard.name }));
+    }
+    else if (screen === "edit_desc" && selectedCard) {
+        const lines = wrapText(descDraft || "(Kosong)", contentWidth);
+        const viewHeight = Math.max(1, contentHeight - 6);
+        const maxStart = Math.max(0, lines.length - viewHeight);
+        const start = clamp(descScroll, 0, maxStart);
+        const visible = lines.slice(start, start + viewHeight);
+        const cursorLine = lines.length - 1;
+        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Edit Deskripsi" }), _jsx(Text, { color: "cyan", children: "Ctrl+S simpan, Enter baris baru." }), visible.map((line, idx) => {
+                    const lineIndex = start + idx;
+                    const isCursor = lineIndex === cursorLine;
+                    const renderedLine = isCursor
+                        ? `${line}${blinkOn ? "|" : " "}`
+                        : line;
+                    return (_jsx(Text, { color: "white", children: renderedLine }, `desc-edit-${idx}`));
+                })] }));
+    }
+    else if (screen === "view_desc" && selectedCard) {
+        const desc = selectedCard.desc?.trim() || "(Tanpa deskripsi)";
+        const lines = wrapText(desc, contentWidth);
+        const viewHeight = Math.max(1, contentHeight - 5);
+        const maxStart = Math.max(0, lines.length - viewHeight);
+        const start = clamp(descScroll, 0, maxStart);
+        const visible = lines.slice(start, start + viewHeight);
+        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Deskripsi" }), visible.map((line, idx) => (_jsx(Text, { color: "white", children: line }, `desc-view-${idx}`)))] }));
     }
     else if (screen === "move_card") {
         const items = [
@@ -943,6 +1149,7 @@ export default function App() {
             archive_card: "Arsipkan card",
             restore_card: "Kembalikan card",
             delete_card: "Hapus card",
+            delete_desc: "Hapus deskripsi",
             delete_checklist: "Hapus checklist",
             delete_checkitem: "Hapus item",
         };
@@ -950,6 +1157,7 @@ export default function App() {
             archive_card: "Card akan dipindahkan ke arsip.",
             restore_card: "Card akan dikembalikan ke list.",
             delete_card: "Card akan dihapus permanen.",
+            delete_desc: "Deskripsi card akan dihapus.",
             delete_checklist: "Checklist akan dihapus permanen.",
             delete_checkitem: "Item checklist akan dihapus permanen.",
         };
