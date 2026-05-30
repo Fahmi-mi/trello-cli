@@ -25,7 +25,7 @@ function HeaderBar({ title, width }) {
 function FooterBar({ hints, width }) {
     const line = "-".repeat(Math.max(0, width));
     const text = truncate(hints.join("  "), width);
-    return (_jsxs(Box, { flexDirection: "column", width: width, children: [_jsx(Text, { color: "blue", children: line }), _jsx(Text, { color: "gray", children: text })] }));
+    return (_jsxs(Box, { flexDirection: "column", width: width, children: [_jsx(Text, { color: "blue", children: line }), _jsx(Text, { color: "white", children: text })] }));
 }
 function Loading({ label }) {
     return (_jsxs(Box, { children: [_jsx(Text, { color: "green", children: _jsx(Spinner, { type: "dots" }) }), _jsxs(Text, { children: [" ", label] })] }));
@@ -36,7 +36,7 @@ function StatusMsg({ msg, color }) {
 function ErrorBanner({ msg, detail }) {
     if (!msg)
         return null;
-    return (_jsxs(Box, { flexDirection: "column", marginBottom: 1, children: [_jsx(Text, { backgroundColor: "red", color: "white", children: " ERROR: " + msg + " " }), detail ? _jsx(Text, { color: "gray", children: detail }) : null] }));
+    return (_jsxs(Box, { flexDirection: "column", marginBottom: 1, children: [_jsx(Text, { backgroundColor: "red", color: "white", children: " ERROR: " + msg + " " }), detail ? _jsx(Text, { color: "white", children: detail }) : null] }));
 }
 function SectionTitle({ label }) {
     return (_jsxs(Box, { flexDirection: "column", marginBottom: 1, children: [_jsx(Text, { color: "green", children: label }), _jsx(Text, { color: "blue", children: "-".repeat(Math.max(3, label.length)) })] }));
@@ -48,7 +48,7 @@ function SelectItem({ label, isSelected, }) {
     return (_jsx(Text, { backgroundColor: isSelected ? "cyan" : undefined, color: isSelected ? "black" : "white", children: ` ${label}` }));
 }
 function ConfirmPanel({ title, message, onConfirm, onCancel, }) {
-    return (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: title }), _jsx(Text, { color: "gray", children: message }), _jsx(Box, { marginTop: 1, children: _jsx(SelectInput, { items: [
+    return (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: title }), _jsx(Text, { color: "white", children: message }), _jsx(Box, { marginTop: 1, children: _jsx(SelectInput, { items: [
                         { label: "Ya", value: "yes" },
                         { label: "Batal", value: "no" },
                     ], onSelect: (item) => {
@@ -61,7 +61,7 @@ function ConfirmPanel({ title, message, onConfirm, onCancel, }) {
 // ── Input panels ─────────────────────────────────────────────────------------
 function TextInputPanel({ prompt, onSubmit, initialValue = "", }) {
     const [value, setValue] = useState(initialValue);
-    return (_jsxs(Box, { flexDirection: "column", children: [_jsx(Text, { color: "yellow", children: prompt }), _jsxs(Box, { marginTop: 1, children: [_jsx(Text, { color: "gray", children: "> " }), _jsx(TextInput, { value: value, onChange: setValue, onSubmit: onSubmit })] })] }));
+    return (_jsxs(Box, { flexDirection: "column", children: [_jsx(Text, { color: "yellow", children: prompt }), _jsxs(Box, { marginTop: 1, children: [_jsx(Text, { color: "white", children: "> " }), _jsx(TextInput, { value: value, onChange: setValue, onSubmit: onSubmit })] })] }));
 }
 function ListColumn({ list, cards, selectedIndex, width, height, isActive, }) {
     const innerWidth = Math.max(1, width - 2);
@@ -71,7 +71,7 @@ function ListColumn({ list, cards, selectedIndex, width, height, isActive, }) {
     const maxStart = Math.max(0, items.length - viewHeight);
     const start = clamp(selectedIndex - Math.floor(viewHeight / 2), 0, maxStart);
     const visible = items.slice(start, start + viewHeight);
-    return (_jsxs(Box, { flexDirection: "column", width: width, paddingX: 1, children: [_jsx(Text, { color: isActive ? "cyan" : "gray", children: header }), visible.length === 0 ? (_jsx(Text, { color: "gray", children: "(Kosong)" })) : (visible.map((label, idx) => {
+    return (_jsxs(Box, { flexDirection: "column", width: width, paddingX: 1, children: [_jsx(Text, { color: isActive ? "cyan" : "white", children: header }), visible.length === 0 ? (_jsx(Text, { color: "white", children: "(Kosong)" })) : (visible.map((label, idx) => {
                 const realIndex = start + idx;
                 const isSelected = isActive && realIndex === selectedIndex;
                 const isAction = realIndex === items.length - 1;
@@ -84,9 +84,9 @@ function VerticalDivider({ height }) {
 }
 function CardDetailPanel({ card, width, }) {
     if (!card) {
-        return _jsx(Text, { color: "gray", children: "Pilih card untuk melihat detail." });
+        return _jsx(Text, { color: "white", children: "Pilih card untuk melihat detail." });
     }
-    return (_jsxs(Box, { flexDirection: "column", width: width, children: [_jsx(Text, { color: "cyan", bold: true, children: "Detail Card" }), _jsx(Text, { color: "white", bold: true, children: truncate(card.name, width) }), card.desc ? (_jsx(Text, { color: "gray", children: truncate(card.desc, width) })) : (_jsx(Text, { color: "gray", children: "(Tanpa deskripsi)" })), card.due ? (_jsxs(Text, { color: card.dueComplete ? "green" : "red", children: ["Due: ", new Date(card.due).toLocaleDateString("id"), card.dueComplete ? " (done)" : ""] })) : (_jsx(Text, { color: "gray", children: "Due: -" })), _jsx(Text, { color: "blue", children: card.shortUrl })] }));
+    return (_jsxs(Box, { flexDirection: "column", width: width, children: [_jsx(Text, { color: "cyan", bold: true, children: "Detail Card" }), _jsx(Text, { color: "white", bold: true, children: truncate(card.name, width) }), card.desc ? (_jsx(Text, { color: "white", children: truncate(card.desc, width) })) : (_jsx(Text, { color: "white", children: "(Tanpa deskripsi)" })), card.due ? (_jsxs(Text, { color: card.dueComplete ? "green" : "red", children: ["Due: ", new Date(card.due).toLocaleDateString("id"), card.dueComplete ? " (done)" : ""] })) : (_jsx(Text, { color: "white", children: "Due: -" })), _jsx(Text, { color: "blue", children: card.shortUrl })] }));
 }
 // ── App ─────────────────────────────────────────────────────────────────-----
 export default function App() {
@@ -891,7 +891,7 @@ export default function App() {
                 key: "add_checklist",
             },
         ];
-        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Checklists" }), checklists.length === 0 && (_jsx(Text, { color: "gray", children: "Belum ada checklist." })), _jsx(SelectInput, { items: items, onSelect: handleChecklistAction, onHighlight: (item) => {
+        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Checklists" }), checklists.length === 0 && (_jsx(Text, { color: "white", children: "Belum ada checklist." })), _jsx(SelectInput, { items: items, onSelect: handleChecklistAction, onHighlight: (item) => {
                         const value = item.value;
                         if (typeof value === "string")
                             setHighlightChecklistId(null);
@@ -913,7 +913,7 @@ export default function App() {
         ];
         const total = selectedChecklist.checkItems.length;
         const done = selectedChecklist.checkItems.filter((i) => i.state === "complete").length;
-        content = (_jsxs(Box, { flexDirection: "column", children: [_jsxs(Text, { color: "gray", children: [selectedChecklist.name, " [", done, "/", total, "]"] }), _jsx(Text, { color: "gray", children: "Pilih item untuk toggle [x]/[ ], atau tambah baru:" }), _jsx(Box, { marginTop: 1, children: _jsx(SelectInput, { items: items, onSelect: handleCheckItemAction, onHighlight: (item) => {
+        content = (_jsxs(Box, { flexDirection: "column", children: [_jsxs(Text, { color: "white", children: [selectedChecklist.name, " [", done, "/", total, "]"] }), _jsx(Text, { color: "white", children: "Pilih item untuk toggle [x]/[ ], atau tambah baru:" }), _jsx(Box, { marginTop: 1, children: _jsx(SelectInput, { items: items, onSelect: handleCheckItemAction, onHighlight: (item) => {
                             const value = item.value;
                             if (value === "add")
                                 setHighlightCheckItem(null);
@@ -930,7 +930,7 @@ export default function App() {
             value: c,
             key: c.id,
         }));
-        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Arsip Card" }), archivedCards.length === 0 && (_jsx(Text, { color: "gray", children: "Tidak ada card terarsip." })), archivedCards.length > 0 && (_jsx(SelectInput, { items: items, onSelect: (item) => {
+        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Arsip Card" }), archivedCards.length === 0 && (_jsx(Text, { color: "white", children: "Tidak ada card terarsip." })), archivedCards.length > 0 && (_jsx(SelectInput, { items: items, onSelect: (item) => {
                         const card = item.value;
                         setSelectedCard(card);
                         setScreen("card_detail");
@@ -959,7 +959,7 @@ export default function App() {
             } }));
     }
     else if (screen === "comments") {
-        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Komentar" }), comments.length === 0 && _jsx(Text, { color: "gray", children: "Belum ada komentar." }), comments.map((c) => (_jsxs(Box, { flexDirection: "column", marginBottom: 1, children: [_jsx(Text, { color: "cyan", bold: true, children: c.memberCreator.fullName }), _jsx(Text, { color: "gray", children: new Date(c.date).toLocaleString("id") }), _jsx(Text, { children: c.data.text })] }, c.id))), _jsx(Box, { marginTop: 1, flexDirection: "column", children: _jsx(SelectInput, { items: [{ label: "Tambah komentar", value: "add" }], onSelect: (item) => {
+        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Komentar" }), comments.length === 0 && (_jsx(Text, { color: "white", children: "Belum ada komentar." })), comments.map((c) => (_jsxs(Box, { flexDirection: "column", marginBottom: 1, children: [_jsx(Text, { color: "cyan", bold: true, children: c.memberCreator.fullName }), _jsx(Text, { color: "white", children: new Date(c.date).toLocaleString("id") }), _jsx(Text, { children: c.data.text })] }, c.id))), _jsx(Box, { marginTop: 1, flexDirection: "column", children: _jsx(SelectInput, { items: [{ label: "Tambah komentar", value: "add" }], onSelect: (item) => {
                             if (item.value === "add")
                                 setScreen("add_comment");
                         }, itemComponent: SelectItem, indicatorComponent: SelectIndicator }) }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));

@@ -69,7 +69,7 @@ function FooterBar({ hints, width }: { hints: string[]; width: number }) {
   return (
     <Box flexDirection="column" width={width}>
       <Text color="blue">{line}</Text>
-      <Text color="gray">{text}</Text>
+      <Text color="white">{text}</Text>
     </Box>
   );
 }
@@ -100,7 +100,7 @@ function ErrorBanner({ msg, detail }: { msg: string; detail?: string }) {
       <Text backgroundColor="red" color="white">
         {" ERROR: " + msg + " "}
       </Text>
-      {detail ? <Text color="gray">{detail}</Text> : null}
+      {detail ? <Text color="white">{detail}</Text> : null}
     </Box>
   );
 }
@@ -149,7 +149,7 @@ function ConfirmPanel({
   return (
     <Box flexDirection="column">
       <SectionTitle label={title} />
-      <Text color="gray">{message}</Text>
+      <Text color="white">{message}</Text>
       <Box marginTop={1}>
         <SelectInput
           items={[
@@ -185,7 +185,7 @@ function TextInputPanel({
     <Box flexDirection="column">
       <Text color="yellow">{prompt}</Text>
       <Box marginTop={1}>
-        <Text color="gray">{"> "}</Text>
+        <Text color="white">{"> "}</Text>
         <TextInput value={value} onChange={setValue} onSubmit={onSubmit} />
       </Box>
     </Box>
@@ -217,9 +217,9 @@ function ListColumn({
 
   return (
     <Box flexDirection="column" width={width} paddingX={1}>
-      <Text color={isActive ? "cyan" : "gray"}>{header}</Text>
+      <Text color={isActive ? "cyan" : "white"}>{header}</Text>
       {visible.length === 0 ? (
-        <Text color="gray">(Kosong)</Text>
+        <Text color="white">(Kosong)</Text>
       ) : (
         visible.map((label, idx) => {
           const realIndex = start + idx;
@@ -262,7 +262,7 @@ function CardDetailPanel({
   width: number;
 }) {
   if (!card) {
-    return <Text color="gray">Pilih card untuk melihat detail.</Text>;
+    return <Text color="white">Pilih card untuk melihat detail.</Text>;
   }
 
   return (
@@ -274,9 +274,9 @@ function CardDetailPanel({
         {truncate(card.name, width)}
       </Text>
       {card.desc ? (
-        <Text color="gray">{truncate(card.desc, width)}</Text>
+        <Text color="white">{truncate(card.desc, width)}</Text>
       ) : (
-        <Text color="gray">(Tanpa deskripsi)</Text>
+        <Text color="white">(Tanpa deskripsi)</Text>
       )}
       {card.due ? (
         <Text color={card.dueComplete ? "green" : "red"}>
@@ -284,7 +284,7 @@ function CardDetailPanel({
           {card.dueComplete ? " (done)" : ""}
         </Text>
       ) : (
-        <Text color="gray">Due: -</Text>
+        <Text color="white">Due: -</Text>
       )}
       <Text color="blue">{card.shortUrl}</Text>
     </Box>
@@ -1173,7 +1173,7 @@ export default function App() {
       <Box flexDirection="column">
         <SectionTitle label="Checklists" />
         {checklists.length === 0 && (
-          <Text color="gray">Belum ada checklist.</Text>
+          <Text color="white">Belum ada checklist.</Text>
         )}
         <SelectInput
           items={items}
@@ -1211,10 +1211,10 @@ export default function App() {
     ).length;
     content = (
       <Box flexDirection="column">
-        <Text color="gray">
+        <Text color="white">
           {selectedChecklist.name} [{done}/{total}]
         </Text>
-        <Text color="gray">
+        <Text color="white">
           Pilih item untuk toggle [x]/[ ], atau tambah baru:
         </Text>
         <Box marginTop={1}>
@@ -1245,7 +1245,7 @@ export default function App() {
       <Box flexDirection="column">
         <SectionTitle label="Arsip Card" />
         {archivedCards.length === 0 && (
-          <Text color="gray">Tidak ada card terarsip.</Text>
+          <Text color="white">Tidak ada card terarsip.</Text>
         )}
         {archivedCards.length > 0 && (
           <SelectInput
@@ -1294,13 +1294,15 @@ export default function App() {
     content = (
       <Box flexDirection="column">
         <SectionTitle label="Komentar" />
-        {comments.length === 0 && <Text color="gray">Belum ada komentar.</Text>}
+        {comments.length === 0 && (
+          <Text color="white">Belum ada komentar.</Text>
+        )}
         {comments.map((c) => (
           <Box key={c.id} flexDirection="column" marginBottom={1}>
             <Text color="cyan" bold>
               {c.memberCreator.fullName}
             </Text>
-            <Text color="gray">{new Date(c.date).toLocaleString("id")}</Text>
+            <Text color="white">{new Date(c.date).toLocaleString("id")}</Text>
             <Text>{c.data.text}</Text>
           </Box>
         ))}
