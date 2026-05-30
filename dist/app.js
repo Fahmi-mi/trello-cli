@@ -115,6 +115,7 @@ export default function App() {
     const [listCardIndex, setListCardIndex] = useState({});
     const [highlightChecklistId, setHighlightChecklistId] = useState(null);
     const [highlightCheckItem, setHighlightCheckItem] = useState(null);
+    const [highlightArchivedCard, setHighlightArchivedCard] = useState(null);
     const [confirmState, setConfirmState] = useState(null);
     const flash = (msg, color = "green") => {
         setStatus(msg);
@@ -193,6 +194,13 @@ export default function App() {
     useEffect(() => {
         setHighlightCheckItem(null);
     }, [selectedChecklist?.id, screen]);
+    useEffect(() => {
+        if (screen !== "archived_cards") {
+            setHighlightArchivedCard(null);
+            return;
+        }
+        setHighlightArchivedCard(archivedCards[0] ?? null);
+    }, [archivedCards, screen]);
     useInput((_input, key) => {
         if (key.escape)
             handleBack();
@@ -313,6 +321,18 @@ export default function App() {
             });
             setScreen("confirm");
         }
+        if (screen === "archived_cards" && (_input === "r" || _input === "d")) {
+            if (!highlightArchivedCard) {
+                showError("Card arsip belum dipilih.");
+                return;
+            }
+            setSelectedCard(highlightArchivedCard);
+            setConfirmState({
+                type: _input === "r" ? "restore_card" : "delete_card",
+                returnScreen: "archived_cards",
+            });
+            setScreen("confirm");
+        }
     });
     function handleBack() {
         clearError();
@@ -400,6 +420,11 @@ export default function App() {
     async function refreshListCards(listId) {
         const cs = await api.getCards(listId);
         setCardsByList((prev) => ({ ...prev, [listId]: cs }));
+        return cs;
+    }
+    async function refreshArchivedCards(listId) {
+        const cs = await api.getArchivedCards(listId);
+        setArchivedCards(cs);
         return cs;
     }
     async function refreshChecklists(cardId) {
@@ -610,16 +635,35 @@ export default function App() {
                 flash("Card diarsipkan.");
                 setScreen("lists");
             }
+            else if (confirmState.type === "restore_card") {
+                const card = requireSelectedCard();
+                if (!card)
+                    return;
+                await api.unarchiveCard(card.id);
+                await refreshListCards(card.idList);
+                if (archivedList) {
+                    await refreshArchivedCards(archivedList.id);
+                }
+                setSelectedCard(null);
+                setLoading(false);
+                flash("Card dikembalikan ke list.");
+                setScreen("archived_cards");
+            }
             else if (confirmState.type === "delete_card") {
                 const card = requireSelectedCard();
                 if (!card)
                     return;
                 await api.deleteCard(card.id);
                 await refreshListCards(card.idList);
+                if (confirmState.returnScreen === "archived_cards" && archivedList) {
+                    await refreshArchivedCards(archivedList.id);
+                }
                 setSelectedCard(null);
                 setLoading(false);
                 flash("Card dihapus.");
-                setScreen("lists");
+                setScreen(confirmState.returnScreen === "archived_cards"
+                    ? "archived_cards"
+                    : "lists");
             }
             else if (confirmState.type === "delete_checklist") {
                 const card = requireSelectedCard();
@@ -729,7 +773,14 @@ export default function App() {
                     "Q: quit",
                 ];
             case "archived_cards":
-                return ["Up/Down: navigasi", "Enter: buka", "Esc: back", "Q: quit"];
+                return [
+                    "Up/Down: navigasi",
+                    "Enter: buka",
+                    "R: kembalikan",
+                    "D: hapus",
+                    "Esc: back",
+                    "Q: quit",
+                ];
             case "card_detail":
                 return [
                     "Up/Down: navigasi",
@@ -883,17 +934,21 @@ export default function App() {
                         const card = item.value;
                         setSelectedCard(card);
                         setScreen("card_detail");
+                    }, onHighlight: (item) => {
+                        setHighlightArchivedCard(item.value);
                     }, itemComponent: SelectItem, indicatorComponent: SelectIndicator }))] }));
     }
     else if (screen === "confirm" && confirmState) {
         const titleMap = {
             archive_card: "Arsipkan card",
+            restore_card: "Kembalikan card",
             delete_card: "Hapus card",
             delete_checklist: "Hapus checklist",
             delete_checkitem: "Hapus item",
         };
         const messageMap = {
             archive_card: "Card akan dipindahkan ke arsip.",
+            restore_card: "Card akan dikembalikan ke list.",
             delete_card: "Card akan dihapus permanen.",
             delete_checklist: "Checklist akan dihapus permanen.",
             delete_checkitem: "Item checklist akan dihapus permanen.",

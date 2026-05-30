@@ -125,6 +125,10 @@ export async function archiveCard(cardId: string): Promise<TrelloCard> {
   return updateCard(cardId, { closed: true });
 }
 
+export async function unarchiveCard(cardId: string): Promise<TrelloCard> {
+  return updateCard(cardId, { closed: false });
+}
+
 export async function deleteCard(cardId: string): Promise<void> {
   await axios.delete(`${BASE}/cards/${cardId}`, {
     params: { ...auth() },

@@ -58,6 +58,9 @@ export async function updateCard(cardId, fields) {
 export async function archiveCard(cardId) {
     return updateCard(cardId, { closed: true });
 }
+export async function unarchiveCard(cardId) {
+    return updateCard(cardId, { closed: false });
+}
 export async function deleteCard(cardId) {
     await axios.delete(`${BASE}/cards/${cardId}`, {
         params: { ...auth() },

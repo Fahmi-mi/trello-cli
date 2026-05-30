@@ -29,6 +29,7 @@ type Screen =
 
 type ConfirmAction =
   | "archive_card"
+  | "restore_card"
   | "delete_card"
   | "delete_checklist"
   | "delete_checkitem";
@@ -329,6 +330,8 @@ export default function App() {
   >(null);
   const [highlightCheckItem, setHighlightCheckItem] =
     useState<TrelloCheckItem | null>(null);
+  const [highlightArchivedCard, setHighlightArchivedCard] =
+    useState<TrelloCard | null>(null);
   const [confirmState, setConfirmState] = useState<{
     type: ConfirmAction;
     returnScreen: Screen;
@@ -423,6 +426,14 @@ export default function App() {
   useEffect(() => {
     setHighlightCheckItem(null);
   }, [selectedChecklist?.id, screen]);
+
+  useEffect(() => {
+    if (screen !== "archived_cards") {
+      setHighlightArchivedCard(null);
+      return;
+    }
+    setHighlightArchivedCard(archivedCards[0] ?? null);
+  }, [archivedCards, screen]);
 
   useInput((_input, key) => {
     if (key.escape) handleBack();
@@ -535,6 +546,18 @@ export default function App() {
       });
       setScreen("confirm");
     }
+    if (screen === "archived_cards" && (_input === "r" || _input === "d")) {
+      if (!highlightArchivedCard) {
+        showError("Card arsip belum dipilih.");
+        return;
+      }
+      setSelectedCard(highlightArchivedCard);
+      setConfirmState({
+        type: _input === "r" ? "restore_card" : "delete_card",
+        returnScreen: "archived_cards",
+      });
+      setScreen("confirm");
+    }
   });
 
   function handleBack() {
@@ -616,6 +639,12 @@ export default function App() {
   async function refreshListCards(listId: string) {
     const cs = await api.getCards(listId);
     setCardsByList((prev) => ({ ...prev, [listId]: cs }));
+    return cs;
+  }
+
+  async function refreshArchivedCards(listId: string) {
+    const cs = await api.getArchivedCards(listId);
+    setArchivedCards(cs);
     return cs;
   }
 
@@ -812,15 +841,34 @@ export default function App() {
         setLoading(false);
         flash("Card diarsipkan.");
         setScreen("lists");
+      } else if (confirmState.type === "restore_card") {
+        const card = requireSelectedCard();
+        if (!card) return;
+        await api.unarchiveCard(card.id);
+        await refreshListCards(card.idList);
+        if (archivedList) {
+          await refreshArchivedCards(archivedList.id);
+        }
+        setSelectedCard(null);
+        setLoading(false);
+        flash("Card dikembalikan ke list.");
+        setScreen("archived_cards");
       } else if (confirmState.type === "delete_card") {
         const card = requireSelectedCard();
         if (!card) return;
         await api.deleteCard(card.id);
         await refreshListCards(card.idList);
+        if (confirmState.returnScreen === "archived_cards" && archivedList) {
+          await refreshArchivedCards(archivedList.id);
+        }
         setSelectedCard(null);
         setLoading(false);
         flash("Card dihapus.");
-        setScreen("lists");
+        setScreen(
+          confirmState.returnScreen === "archived_cards"
+            ? "archived_cards"
+            : "lists",
+        );
       } else if (confirmState.type === "delete_checklist") {
         const card = requireSelectedCard();
         if (!card || !confirmState.checklistId) return;
@@ -932,7 +980,14 @@ export default function App() {
           "Q: quit",
         ];
       case "archived_cards":
-        return ["Up/Down: navigasi", "Enter: buka", "Esc: back", "Q: quit"];
+        return [
+          "Up/Down: navigasi",
+          "Enter: buka",
+          "R: kembalikan",
+          "D: hapus",
+          "Esc: back",
+          "Q: quit",
+        ];
       case "card_detail":
         return [
           "Up/Down: navigasi",
@@ -1200,6 +1255,9 @@ export default function App() {
               setSelectedCard(card);
               setScreen("card_detail");
             }}
+            onHighlight={(item) => {
+              setHighlightArchivedCard(item.value as TrelloCard);
+            }}
             itemComponent={SelectItem}
             indicatorComponent={SelectIndicator}
           />
@@ -1209,12 +1267,14 @@ export default function App() {
   } else if (screen === "confirm" && confirmState) {
     const titleMap: Record<ConfirmAction, string> = {
       archive_card: "Arsipkan card",
+      restore_card: "Kembalikan card",
       delete_card: "Hapus card",
       delete_checklist: "Hapus checklist",
       delete_checkitem: "Hapus item",
     };
     const messageMap: Record<ConfirmAction, string> = {
       archive_card: "Card akan dipindahkan ke arsip.",
+      restore_card: "Card akan dikembalikan ke list.",
       delete_card: "Card akan dihapus permanen.",
       delete_checklist: "Checklist akan dihapus permanen.",
       delete_checkitem: "Item checklist akan dihapus permanen.",
