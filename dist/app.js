@@ -103,6 +103,8 @@ export default function App() {
     const [boards, setBoards] = useState([]);
     const [lists, setLists] = useState([]);
     const [cardsByList, setCardsByList] = useState({});
+    const [archivedCards, setArchivedCards] = useState([]);
+    const [archivedList, setArchivedList] = useState(null);
     const [checklists, setChecklists] = useState([]);
     const [comments, setComments] = useState([]);
     const [selectedBoard, setSelectedBoard] = useState(null);
@@ -145,6 +147,12 @@ export default function App() {
                 showError("Gagal load boards. Cek API key/token.", err?.message || "");
                 setLoading(false);
             });
+        }
+    }, [screen]);
+    useEffect(() => {
+        if (screen === "boards") {
+            setArchivedCards([]);
+            setArchivedList(null);
         }
     }, [screen]);
     useEffect(() => {
@@ -235,6 +243,25 @@ export default function App() {
                     setScreen("card_detail");
                 }
             }
+            if (_input === "v") {
+                const list = lists[listIndex];
+                if (!list)
+                    return;
+                setSelectedList(list);
+                setArchivedList(list);
+                startLoading();
+                api
+                    .getArchivedCards(list.id)
+                    .then((cards) => {
+                    setArchivedCards(cards);
+                    setLoading(false);
+                    setScreen("archived_cards");
+                })
+                    .catch((err) => {
+                    showError("Gagal load arsip card.", err?.message || "");
+                    setLoading(false);
+                });
+            }
             if (_input === "a" || _input === "d") {
                 const list = lists[listIndex];
                 if (!list)
@@ -298,6 +325,8 @@ export default function App() {
             return exit();
         if (screen === "lists")
             setScreen("boards");
+        else if (screen === "archived_cards")
+            setScreen("lists");
         else if (screen === "card_detail")
             setScreen("lists");
         else if (screen === "checklists")
@@ -658,6 +687,8 @@ export default function App() {
                 return "Boards";
             case "lists":
                 return selectedBoard ? `Board: ${selectedBoard.name}` : "Lists";
+            case "archived_cards":
+                return archivedList ? `Arsip: ${archivedList.name}` : "Arsip Cards";
             case "card_detail":
                 return selectedCard ? `Card: ${selectedCard.name}` : "Card";
             case "create_card":
@@ -691,11 +722,14 @@ export default function App() {
                     "Left/Right: list",
                     "Up/Down: card",
                     "Enter: buka",
+                    "V: card yang diarsipkan",
                     "A: arsip",
                     "D: hapus",
                     "Esc: back",
                     "Q: quit",
                 ];
+            case "archived_cards":
+                return ["Up/Down: navigasi", "Enter: buka", "Esc: back", "Q: quit"];
             case "card_detail":
                 return [
                     "Up/Down: navigasi",
@@ -838,6 +872,18 @@ export default function App() {
     }
     else if (screen === "add_checkitem" && !selectedChecklist) {
         content = _jsx(Loading, { label: "Loading checklist..." });
+    }
+    else if (screen === "archived_cards") {
+        const items = archivedCards.map((c) => ({
+            label: c.name,
+            value: c,
+            key: c.id,
+        }));
+        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Arsip Card" }), archivedCards.length === 0 && (_jsx(Text, { color: "gray", children: "Tidak ada card terarsip." })), archivedCards.length > 0 && (_jsx(SelectInput, { items: items, onSelect: (item) => {
+                        const card = item.value;
+                        setSelectedCard(card);
+                        setScreen("card_detail");
+                    }, itemComponent: SelectItem, indicatorComponent: SelectIndicator }))] }));
     }
     else if (screen === "confirm" && confirmState) {
         const titleMap = {

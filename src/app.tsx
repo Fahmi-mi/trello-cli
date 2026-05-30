@@ -24,6 +24,7 @@ type Screen =
   | "add_checkitem"
   | "comments"
   | "add_comment"
+  | "archived_cards"
   | "confirm";
 
 type ConfirmAction =
@@ -309,6 +310,8 @@ export default function App() {
   const [cardsByList, setCardsByList] = useState<Record<string, TrelloCard[]>>(
     {},
   );
+  const [archivedCards, setArchivedCards] = useState<TrelloCard[]>([]);
+  const [archivedList, setArchivedList] = useState<TrelloList | null>(null);
   const [checklists, setChecklists] = useState<TrelloChecklist[]>([]);
   const [comments, setComments] = useState<api.TrelloComment[]>([]);
 
@@ -371,6 +374,13 @@ export default function App() {
           );
           setLoading(false);
         });
+    }
+  }, [screen]);
+
+  useEffect(() => {
+    if (screen === "boards") {
+      setArchivedCards([]);
+      setArchivedList(null);
     }
   }, [screen]);
 
@@ -458,6 +468,24 @@ export default function App() {
           setScreen("card_detail");
         }
       }
+      if (_input === "v") {
+        const list = lists[listIndex];
+        if (!list) return;
+        setSelectedList(list);
+        setArchivedList(list);
+        startLoading();
+        api
+          .getArchivedCards(list.id)
+          .then((cards) => {
+            setArchivedCards(cards);
+            setLoading(false);
+            setScreen("archived_cards");
+          })
+          .catch((err) => {
+            showError("Gagal load arsip card.", err?.message || "");
+            setLoading(false);
+          });
+      }
       if (_input === "a" || _input === "d") {
         const list = lists[listIndex];
         if (!list) return;
@@ -518,6 +546,7 @@ export default function App() {
     }
     if (screen === "boards") return exit();
     if (screen === "lists") setScreen("boards");
+    else if (screen === "archived_cards") setScreen("lists");
     else if (screen === "card_detail") setScreen("lists");
     else if (screen === "checklists") setScreen("card_detail");
     else if (screen === "add_checklist") setScreen("checklists");
@@ -860,6 +889,8 @@ export default function App() {
         return "Boards";
       case "lists":
         return selectedBoard ? `Board: ${selectedBoard.name}` : "Lists";
+      case "archived_cards":
+        return archivedList ? `Arsip: ${archivedList.name}` : "Arsip Cards";
       case "card_detail":
         return selectedCard ? `Card: ${selectedCard.name}` : "Card";
       case "create_card":
@@ -894,11 +925,14 @@ export default function App() {
           "Left/Right: list",
           "Up/Down: card",
           "Enter: buka",
+          "V: card yang diarsipkan",
           "A: arsip",
           "D: hapus",
           "Esc: back",
           "Q: quit",
         ];
+      case "archived_cards":
+        return ["Up/Down: navigasi", "Enter: buka", "Esc: back", "Q: quit"];
       case "card_detail":
         return [
           "Up/Down: navigasi",
@@ -1146,6 +1180,32 @@ export default function App() {
     );
   } else if (screen === "add_checkitem" && !selectedChecklist) {
     content = <Loading label="Loading checklist..." />;
+  } else if (screen === "archived_cards") {
+    const items = archivedCards.map((c) => ({
+      label: c.name,
+      value: c as TrelloCard,
+      key: c.id,
+    }));
+    content = (
+      <Box flexDirection="column">
+        <SectionTitle label="Arsip Card" />
+        {archivedCards.length === 0 && (
+          <Text color="gray">Tidak ada card terarsip.</Text>
+        )}
+        {archivedCards.length > 0 && (
+          <SelectInput
+            items={items}
+            onSelect={(item) => {
+              const card = item.value as TrelloCard;
+              setSelectedCard(card);
+              setScreen("card_detail");
+            }}
+            itemComponent={SelectItem}
+            indicatorComponent={SelectIndicator}
+          />
+        )}
+      </Box>
+    );
   } else if (screen === "confirm" && confirmState) {
     const titleMap: Record<ConfirmAction, string> = {
       archive_card: "Arsipkan card",

@@ -76,6 +76,17 @@ export async function getCards(listId: string): Promise<TrelloCard[]> {
   return res.data;
 }
 
+export async function getArchivedCards(listId: string): Promise<TrelloCard[]> {
+  const res = await axios.get(`${BASE}/lists/${listId}/cards`, {
+    params: {
+      ...auth(),
+      filter: "closed",
+      fields: "name,desc,idList,due,dueComplete,shortUrl",
+    },
+  });
+  return res.data;
+}
+
 export async function getCard(cardId: string): Promise<TrelloCard> {
   const res = await axios.get(`${BASE}/cards/${cardId}`, {
     params: { ...auth() },

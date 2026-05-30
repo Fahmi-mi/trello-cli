@@ -27,6 +27,16 @@ export async function getCards(listId) {
     });
     return res.data;
 }
+export async function getArchivedCards(listId) {
+    const res = await axios.get(`${BASE}/lists/${listId}/cards`, {
+        params: {
+            ...auth(),
+            filter: "closed",
+            fields: "name,desc,idList,due,dueComplete,shortUrl",
+        },
+    });
+    return res.data;
+}
 export async function getCard(cardId) {
     const res = await axios.get(`${BASE}/cards/${cardId}`, {
         params: { ...auth() },
