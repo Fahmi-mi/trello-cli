@@ -24,6 +24,7 @@ type Screen =
   | "checklists"
   | "add_checklist"
   | "add_checkitem"
+  | "create_checkitem"
   | "comments"
   | "add_comment"
   | "archived_cards"
@@ -685,6 +686,7 @@ export default function App() {
     else if (screen === "checklists") setScreen("card_detail");
     else if (screen === "add_checklist") setScreen("checklists");
     else if (screen === "add_checkitem") setScreen("checklists");
+    else if (screen === "create_checkitem") setScreen("add_checkitem");
     else if (screen === "comments") setScreen("card_detail");
     else if (screen === "add_comment") setScreen("comments");
     else if (screen === "create_card") setScreen("lists");
@@ -923,7 +925,7 @@ export default function App() {
   async function handleCheckItemAction(item: {
     value: TrelloCheckItem | "add";
   }) {
-    if (item.value === "add") return setScreen("add_checkitem");
+    if (item.value === "add") return setScreen("create_checkitem");
     const ci = item.value as TrelloCheckItem;
     const newState = ci.state === "complete" ? "incomplete" : "complete";
     const card = requireSelectedCard();
@@ -1105,6 +1107,8 @@ export default function App() {
         return "Buat Checklist";
       case "add_checkitem":
         return "Checklist Items";
+      case "create_checkitem":
+        return "Tambah Item";
       case "comments":
         return "Komentar";
       case "add_comment":
@@ -1184,6 +1188,8 @@ export default function App() {
           "Esc: back",
           "Q: quit",
         ];
+      case "create_checkitem":
+        return ["Enter: simpan", "Esc: back", "Q: quit"];
       case "move_card":
         return ["Up/Down: pilih", "Enter: pindah", "Esc: back", "Q: quit"];
       default:
@@ -1446,6 +1452,13 @@ export default function App() {
         </Box>
         <StatusMsg msg={status} color={statusColor} />
       </Box>
+    );
+  } else if (screen === "create_checkitem") {
+    content = (
+      <TextInputPanel
+        prompt="Nama item checklist:"
+        onSubmit={handleAddCheckItem}
+      />
     );
   } else if (screen === "add_checkitem" && !selectedChecklist) {
     content = <Loading label="Loading checklist..." />;

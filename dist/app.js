@@ -471,6 +471,8 @@ export default function App() {
             setScreen("checklists");
         else if (screen === "add_checkitem")
             setScreen("checklists");
+        else if (screen === "create_checkitem")
+            setScreen("add_checkitem");
         else if (screen === "comments")
             setScreen("card_detail");
         else if (screen === "add_comment")
@@ -724,7 +726,7 @@ export default function App() {
     }
     async function handleCheckItemAction(item) {
         if (item.value === "add")
-            return setScreen("add_checkitem");
+            return setScreen("create_checkitem");
         const ci = item.value;
         const newState = ci.state === "complete" ? "incomplete" : "complete";
         const card = requireSelectedCard();
@@ -912,6 +914,8 @@ export default function App() {
                 return "Buat Checklist";
             case "add_checkitem":
                 return "Checklist Items";
+            case "create_checkitem":
+                return "Tambah Item";
             case "comments":
                 return "Komentar";
             case "add_comment":
@@ -990,6 +994,8 @@ export default function App() {
                     "Esc: back",
                     "Q: quit",
                 ];
+            case "create_checkitem":
+                return ["Enter: simpan", "Esc: back", "Q: quit"];
             case "move_card":
                 return ["Up/Down: pilih", "Enter: pindah", "Esc: back", "Q: quit"];
             default:
@@ -1126,6 +1132,9 @@ export default function App() {
                             else
                                 setHighlightCheckItem(value);
                         }, itemComponent: SelectItem, indicatorComponent: SelectIndicator }) }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
+    }
+    else if (screen === "create_checkitem") {
+        content = (_jsx(TextInputPanel, { prompt: "Nama item checklist:", onSubmit: handleAddCheckItem }));
     }
     else if (screen === "add_checkitem" && !selectedChecklist) {
         content = _jsx(Loading, { label: "Loading checklist..." });
