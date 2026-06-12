@@ -887,7 +887,7 @@ export default function App() {
     const headerHeight = 3;
     const footerHeight = 2;
     const contentHeight = Math.max(1, height - headerHeight - footerHeight);
-    const contentWidth = Math.max(20, width - 4);
+    const contentWidth = Math.max(20, width - 12);
     const headerTitle = (() => {
         switch (screen) {
             case "boards":
@@ -1007,7 +1007,11 @@ export default function App() {
         content = _jsx(Loading, { label: "Loading..." });
     }
     else if (screen === "boards") {
-        const items = boards.map((b) => ({ label: b.name, value: b, key: b.id }));
+        const items = boards.map((b) => ({
+            label: truncate(b.name, contentWidth),
+            value: b,
+            key: b.id,
+        }));
         content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Boards" }), _jsx(SelectInput, { items: items, onSelect: handleBoardSelect, itemComponent: SelectItem, indicatorComponent: SelectIndicator }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
     }
     else if (screen === "lists") {
@@ -1079,7 +1083,7 @@ export default function App() {
             ...lists
                 .filter((l) => l.id !== selectedCard?.idList)
                 .map((l) => ({
-                label: l.name,
+                label: truncate(l.name, contentWidth),
                 value: l,
                 key: l.id,
             })),
@@ -1092,7 +1096,7 @@ export default function App() {
                 const total = cl.checkItems.length;
                 const done = cl.checkItems.filter((i) => i.state === "complete").length;
                 return {
-                    label: `${cl.name}  [${done}/${total}]`,
+                    label: truncate(`${cl.name}  [${done}/${total}]`, contentWidth),
                     value: cl,
                     key: cl.id,
                 };
@@ -1117,7 +1121,7 @@ export default function App() {
     else if (screen === "add_checkitem" && selectedChecklist) {
         const items = [
             ...selectedChecklist.checkItems.map((ci) => ({
-                label: `${ci.state === "complete" ? "[x]" : "[ ]"} ${ci.name}`,
+                label: truncate(`${ci.state === "complete" ? "[x]" : "[ ]"} ${ci.name}`, contentWidth),
                 value: ci,
                 key: ci.id,
             })),
@@ -1141,7 +1145,7 @@ export default function App() {
     }
     else if (screen === "archived_cards") {
         const items = archivedCards.map((c) => ({
-            label: c.name,
+            label: truncate(c.name, contentWidth),
             value: c,
             key: c.id,
         }));
@@ -1187,5 +1191,5 @@ export default function App() {
     else {
         content = _jsx(Loading, { label: "Loading..." });
     }
-    return (_jsxs(Box, { flexDirection: "column", width: width, height: height, children: [_jsx(HeaderBar, { title: headerTitle, width: width }), _jsxs(Box, { flexDirection: "column", width: width, height: contentHeight, paddingX: 2, paddingY: 1, children: [_jsx(ErrorBanner, { msg: error, detail: errorDetail }), content] }), _jsx(FooterBar, { hints: footerHints, width: width })] }));
+    return (_jsxs(Box, { flexDirection: "column", width: width, height: height, children: [_jsx(HeaderBar, { title: headerTitle, width: width }), _jsxs(Box, { flexDirection: "column", height: contentHeight, paddingX: 2, paddingY: 1, children: [_jsx(ErrorBanner, { msg: error, detail: errorDetail }), content] }), _jsx(FooterBar, { hints: footerHints, width: width })] }));
 }

@@ -1079,7 +1079,7 @@ export default function App() {
   const headerHeight = 3;
   const footerHeight = 2;
   const contentHeight = Math.max(1, height - headerHeight - footerHeight);
-  const contentWidth = Math.max(20, width - 4);
+  const contentWidth = Math.max(20, width - 12);
 
   const headerTitle = (() => {
     switch (screen) {
@@ -1202,7 +1202,11 @@ export default function App() {
   if (loading) {
     content = <Loading label="Loading..." />;
   } else if (screen === "boards") {
-    const items = boards.map((b) => ({ label: b.name, value: b, key: b.id }));
+    const items = boards.map((b) => ({
+      label: truncate(b.name, contentWidth),
+      value: b,
+      key: b.id,
+    }));
     content = (
       <Box flexDirection="column">
         <SectionTitle label="Boards" />
@@ -1354,7 +1358,7 @@ export default function App() {
       ...lists
         .filter((l) => l.id !== selectedCard?.idList)
         .map((l) => ({
-          label: l.name,
+          label: truncate(l.name, contentWidth),
           value: l as TrelloList,
           key: l.id,
         })),
@@ -1378,7 +1382,7 @@ export default function App() {
           (i: TrelloCheckItem) => i.state === "complete",
         ).length;
         return {
-          label: `${cl.name}  [${done}/${total}]`,
+          label: truncate(`${cl.name}  [${done}/${total}]`, contentWidth),
           value: cl as TrelloChecklist | string,
           key: cl.id,
         };
@@ -1419,7 +1423,10 @@ export default function App() {
   } else if (screen === "add_checkitem" && selectedChecklist) {
     const items = [
       ...selectedChecklist.checkItems.map((ci: TrelloCheckItem) => ({
-        label: `${ci.state === "complete" ? "[x]" : "[ ]"} ${ci.name}`,
+        label: truncate(
+          `${ci.state === "complete" ? "[x]" : "[ ]"} ${ci.name}`,
+          contentWidth,
+        ),
         value: ci as TrelloCheckItem | "add",
         key: ci.id,
       })),
@@ -1464,7 +1471,7 @@ export default function App() {
     content = <Loading label="Loading checklist..." />;
   } else if (screen === "archived_cards") {
     const items = archivedCards.map((c) => ({
-      label: c.name,
+      label: truncate(c.name, contentWidth),
       value: c as TrelloCard,
       key: c.id,
     }));
@@ -1561,7 +1568,6 @@ export default function App() {
       <HeaderBar title={headerTitle} width={width} />
       <Box
         flexDirection="column"
-        width={width}
         height={contentHeight}
         paddingX={2}
         paddingY={1}
