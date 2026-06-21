@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Box, Text, useApp, useInput, useStdout } from "ink";
-import SelectInput from "ink-select-input";
 import TextInput from "ink-text-input";
 import Spinner from "ink-spinner";
 import * as api from "./api.js";
@@ -149,6 +148,24 @@ function SectionTitle({ label }: { label: string }) {
   );
 }
 
+function ScrollHint({
+  position,
+  total,
+  limit,
+}: {
+  position: number;
+  total: number;
+  limit: number;
+}) {
+  if (total <= limit) return null;
+  const current = clamp(position, 1, total);
+  return (
+    <Text color="blue">
+      Item {current} dari {total} — scroll otomatis saat Up/Down ditekan.
+    </Text>
+  );
+}
+
 function SelectIndicator({ isSelected }: { isSelected?: boolean }) {
   return <Text>{isSelected ? " " : " "}</Text>;
 }
@@ -167,6 +184,103 @@ function SelectItem({
     >
       {` ${label}`}
     </Text>
+  );
+}
+
+// ── SelectInput ─────────────────────────────────────────────────────────────
+// Minimal, in-house replacement for ink-select-input. We stopped using that
+// package because its Up/Down navigation always wraps around (pressing Down
+// on the last item jumps back to the first one, and vice versa). Once a list
+// is windowed via `limit`, that wrap-around made it look like the list kept
+// scrolling forever past "Tambah item" / the last real entry, which is
+// exactly the confusing behaviour reported. This version stops dead at the
+// first/last item instead, and (when `limit` is set and the list is longer
+// than it) keeps the selected row centered in the visible window.
+type SelectInputItem<T> = { label: string; value: T; key?: string };
+
+function SelectInput<T>({
+  items,
+  limit: customLimit,
+  onSelect,
+  onHighlight,
+  itemComponent: ItemComponent = SelectItem,
+  indicatorComponent: IndicatorComponent = SelectIndicator,
+}: {
+  items: SelectInputItem<T>[];
+  limit?: number;
+  onSelect?: (item: SelectInputItem<T>) => void;
+  onHighlight?: (item: SelectInputItem<T>) => void;
+  itemComponent?: React.ComponentType<{
+    label: string;
+    isSelected?: boolean;
+  }>;
+  indicatorComponent?: React.ComponentType<{ isSelected?: boolean }>;
+}) {
+  const hasLimit =
+    typeof customLimit === "number" && items.length > customLimit;
+  const limit = hasLimit
+    ? Math.max(1, Math.min(customLimit as number, items.length))
+    : items.length;
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  // If the underlying item list changes shape (refetch, filter, etc.) and
+  // the old index no longer fits, clamp it back into range instead of
+  // pointing at something that no longer exists.
+  const previousKeysRef = useRef<Array<T | string>>([]);
+  useEffect(() => {
+    const nextKeys = items.map((item) => item.key ?? item.value);
+    const sameItems =
+      previousKeysRef.current.length === nextKeys.length &&
+      previousKeysRef.current.every((k, i) => k === nextKeys[i]);
+    if (!sameItems) {
+      setSelectedIndex((current) =>
+        clamp(current, 0, Math.max(0, items.length - 1)),
+      );
+    }
+    previousKeysRef.current = nextKeys;
+  }, [items]);
+
+  useInput((input, key) => {
+    if (items.length === 0) return;
+    if (key.upArrow || input === "k") {
+      setSelectedIndex((current) => {
+        const next = Math.max(0, current - 1);
+        if (next !== current && onHighlight) onHighlight(items[next]);
+        return next;
+      });
+    }
+    if (key.downArrow || input === "j") {
+      setSelectedIndex((current) => {
+        const next = Math.min(items.length - 1, current + 1);
+        if (next !== current && onHighlight) onHighlight(items[next]);
+        return next;
+      });
+    }
+    if (key.return) {
+      const item = items[selectedIndex];
+      if (item && onSelect) onSelect(item);
+    }
+  });
+
+  const maxStart = Math.max(0, items.length - limit);
+  const start = hasLimit
+    ? clamp(selectedIndex - Math.floor(limit / 2), 0, maxStart)
+    : 0;
+  const visible = items.slice(start, start + limit);
+
+  return (
+    <Box flexDirection="column">
+      {visible.map((item, idx) => {
+        const realIndex = start + idx;
+        const isSelected = realIndex === selectedIndex;
+        return (
+          <Box key={item.key ?? String(item.value)}>
+            <IndicatorComponent isSelected={isSelected} />
+            <ItemComponent label={item.label} isSelected={isSelected} />
+          </Box>
+        );
+      })}
+    </Box>
   );
 }
 
@@ -370,6 +484,14 @@ export default function App() {
     useState<TrelloCheckItem | null>(null);
   const [highlightArchivedCard, setHighlightArchivedCard] =
     useState<TrelloCard | null>(null);
+  // Current position (0-based) of the highlighted row in each scrollable
+  // list, used only to show a live "item X dari Y" hint so it's obvious the
+  // list keeps scrolling instead of being stuck on the first window.
+  const [boardHighlightIndex, setBoardHighlightIndex] = useState(0);
+  const [checklistHighlightIndex, setChecklistHighlightIndex] = useState(0);
+  const [checkItemHighlightIndex, setCheckItemHighlightIndex] = useState(0);
+  const [archivedHighlightIndex, setArchivedHighlightIndex] = useState(0);
+  const [moveHighlightIndex, setMoveHighlightIndex] = useState(0);
   const [confirmState, setConfirmState] = useState<{
     type: ConfirmAction;
     returnScreen: Screen;
@@ -463,15 +585,29 @@ export default function App() {
 
   useEffect(() => {
     setHighlightCheckItem(null);
+    setCheckItemHighlightIndex(0);
   }, [selectedChecklist?.id, screen]);
 
   useEffect(() => {
     if (screen !== "archived_cards") {
       setHighlightArchivedCard(null);
+      setArchivedHighlightIndex(0);
       return;
     }
     setHighlightArchivedCard(archivedCards[0] ?? null);
   }, [archivedCards, screen]);
+
+  useEffect(() => {
+    if (screen === "boards") setBoardHighlightIndex(0);
+  }, [screen]);
+
+  useEffect(() => {
+    if (screen === "checklists") setChecklistHighlightIndex(0);
+  }, [screen, checklists]);
+
+  useEffect(() => {
+    if (screen === "move_card") setMoveHighlightIndex(0);
+  }, [screen]);
 
   useEffect(() => {
     if (screen !== "view_desc") return;
@@ -1081,6 +1217,17 @@ export default function App() {
   const contentHeight = Math.max(1, height - headerHeight - footerHeight);
   const contentWidth = Math.max(20, width - 12);
 
+  // Several screens render a scrollable SelectInput list below a title/status
+  // area. ink-select-input renders every item at once unless a `limit` is
+  // given — once a list (e.g. a checklist with many items) is taller than the
+  // terminal, Ink can no longer redraw the screen cleanly and you get exactly
+  // the symptoms reported: lines getting cut off and content appearing to
+  // jump around on every keypress. Capping `limit` to the space actually
+  // available makes these lists scroll automatically instead (Up/Down still
+  // works exactly as before — ink-select-input's own windowing kicks in).
+  const listLimitWithStatus = Math.max(3, contentHeight - 7);
+  const listLimitTitleOnly = Math.max(3, contentHeight - 5);
+
   const headerTitle = (() => {
     switch (screen) {
       case "boards":
@@ -1155,7 +1302,7 @@ export default function App() {
         ];
       case "checklists":
         return [
-          "Up/Down: navigasi",
+          "Up/Down: navigasi (scroll)",
           "Enter: pilih",
           "D: hapus",
           "Esc: back",
@@ -1182,7 +1329,7 @@ export default function App() {
         return ["Enter: simpan", "Esc: back", "Q: quit"];
       case "add_checkitem":
         return [
-          "Up/Down: navigasi",
+          "Up/Down: navigasi (scroll)",
           "Enter: pilih",
           "D: hapus",
           "Esc: back",
@@ -1210,9 +1357,19 @@ export default function App() {
     content = (
       <Box flexDirection="column">
         <SectionTitle label="Boards" />
+        <ScrollHint
+          position={boardHighlightIndex + 1}
+          total={items.length}
+          limit={listLimitWithStatus}
+        />
         <SelectInput
           items={items}
+          limit={listLimitWithStatus}
           onSelect={handleBoardSelect}
+          onHighlight={(item) => {
+            const idx = items.findIndex((it) => it.key === item.key);
+            setBoardHighlightIndex(idx >= 0 ? idx : 0);
+          }}
           itemComponent={SelectItem}
           indicatorComponent={SelectIndicator}
         />
@@ -1281,6 +1438,7 @@ export default function App() {
           <SectionTitle label="Aksi" />
           <SelectInput
             items={actions}
+            limit={listLimitWithStatus}
             onSelect={handleCardAction}
             itemComponent={SelectItem}
             indicatorComponent={SelectIndicator}
@@ -1366,9 +1524,19 @@ export default function App() {
     content = (
       <Box flexDirection="column">
         <SectionTitle label="Pilih list tujuan" />
+        <ScrollHint
+          position={moveHighlightIndex + 1}
+          total={items.length}
+          limit={listLimitTitleOnly}
+        />
         <SelectInput
           items={items}
+          limit={listLimitTitleOnly}
           onSelect={handleMoveCard}
+          onHighlight={(item) => {
+            const idx = items.findIndex((it) => it.key === item.key);
+            setMoveHighlightIndex(idx >= 0 ? idx : 0);
+          }}
           itemComponent={SelectItem}
           indicatorComponent={SelectIndicator}
         />
@@ -1399,13 +1567,21 @@ export default function App() {
         {checklists.length === 0 && (
           <Text color="white">Belum ada checklist.</Text>
         )}
+        <ScrollHint
+          position={checklistHighlightIndex + 1}
+          total={items.length}
+          limit={listLimitWithStatus}
+        />
         <SelectInput
           items={items}
+          limit={listLimitWithStatus}
           onSelect={handleChecklistAction}
           onHighlight={(item) => {
             const value = item.value as TrelloChecklist | string;
             if (typeof value === "string") setHighlightChecklistId(null);
             else setHighlightChecklistId(value.id);
+            const idx = items.findIndex((it) => it.key === item.key);
+            setChecklistHighlightIndex(idx >= 0 ? idx : 0);
           }}
           itemComponent={SelectItem}
           indicatorComponent={SelectIndicator}
@@ -1444,14 +1620,22 @@ export default function App() {
         <Text color="white">
           Pilih item untuk toggle [x]/[ ], atau tambah baru:
         </Text>
+        <ScrollHint
+          position={checkItemHighlightIndex + 1}
+          total={items.length}
+          limit={listLimitWithStatus}
+        />
         <Box marginTop={1}>
           <SelectInput
             items={items}
+            limit={listLimitWithStatus}
             onSelect={handleCheckItemAction}
             onHighlight={(item) => {
               const value = item.value as TrelloCheckItem | "add";
               if (value === "add") setHighlightCheckItem(null);
               else setHighlightCheckItem(value);
+              const idx = items.findIndex((it) => it.key === item.key);
+              setCheckItemHighlightIndex(idx >= 0 ? idx : 0);
             }}
             itemComponent={SelectItem}
             indicatorComponent={SelectIndicator}
@@ -1482,19 +1666,29 @@ export default function App() {
           <Text color="white">Tidak ada card terarsip.</Text>
         )}
         {archivedCards.length > 0 && (
-          <SelectInput
-            items={items}
-            onSelect={(item) => {
-              const card = item.value as TrelloCard;
-              setSelectedCard(card);
-              setScreen("card_detail");
-            }}
-            onHighlight={(item) => {
-              setHighlightArchivedCard(item.value as TrelloCard);
-            }}
-            itemComponent={SelectItem}
-            indicatorComponent={SelectIndicator}
-          />
+          <>
+            <ScrollHint
+              position={archivedHighlightIndex + 1}
+              total={items.length}
+              limit={listLimitTitleOnly}
+            />
+            <SelectInput
+              items={items}
+              limit={listLimitTitleOnly}
+              onSelect={(item) => {
+                const card = item.value as TrelloCard;
+                setSelectedCard(card);
+                setScreen("card_detail");
+              }}
+              onHighlight={(item) => {
+                setHighlightArchivedCard(item.value as TrelloCard);
+                const idx = items.findIndex((it) => it.key === item.key);
+                setArchivedHighlightIndex(idx >= 0 ? idx : 0);
+              }}
+              itemComponent={SelectItem}
+              indicatorComponent={SelectIndicator}
+            />
+          </>
         )}
       </Box>
     );

@@ -1,7 +1,6 @@
-import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useEffect, useState } from "react";
+import { jsx as _jsx, jsxs as _jsxs, Fragment as _Fragment } from "react/jsx-runtime";
+import { useEffect, useRef, useState } from "react";
 import { Box, Text, useApp, useInput, useStdout } from "ink";
-import SelectInput from "ink-select-input";
 import TextInput from "ink-text-input";
 import Spinner from "ink-spinner";
 import * as api from "./api.js";
@@ -77,11 +76,72 @@ function ErrorBanner({ msg, detail }) {
 function SectionTitle({ label }) {
     return (_jsxs(Box, { flexDirection: "column", marginBottom: 1, children: [_jsx(Text, { color: "green", children: label }), _jsx(Text, { color: "blue", children: "-".repeat(Math.max(3, label.length)) })] }));
 }
+function ScrollHint({ position, total, limit, }) {
+    if (total <= limit)
+        return null;
+    const current = clamp(position, 1, total);
+    return (_jsxs(Text, { color: "blue", children: ["Item ", current, " dari ", total, " \u2014 scroll otomatis saat Up/Down ditekan."] }));
+}
 function SelectIndicator({ isSelected }) {
     return _jsx(Text, { children: isSelected ? " " : " " });
 }
 function SelectItem({ label, isSelected, }) {
     return (_jsx(Text, { backgroundColor: isSelected ? "cyan" : undefined, color: isSelected ? "black" : "white", children: ` ${label}` }));
+}
+function SelectInput({ items, limit: customLimit, onSelect, onHighlight, itemComponent: ItemComponent = SelectItem, indicatorComponent: IndicatorComponent = SelectIndicator, }) {
+    const hasLimit = typeof customLimit === "number" && items.length > customLimit;
+    const limit = hasLimit
+        ? Math.max(1, Math.min(customLimit, items.length))
+        : items.length;
+    const [selectedIndex, setSelectedIndex] = useState(0);
+    // If the underlying item list changes shape (refetch, filter, etc.) and
+    // the old index no longer fits, clamp it back into range instead of
+    // pointing at something that no longer exists.
+    const previousKeysRef = useRef([]);
+    useEffect(() => {
+        const nextKeys = items.map((item) => item.key ?? item.value);
+        const sameItems = previousKeysRef.current.length === nextKeys.length &&
+            previousKeysRef.current.every((k, i) => k === nextKeys[i]);
+        if (!sameItems) {
+            setSelectedIndex((current) => clamp(current, 0, Math.max(0, items.length - 1)));
+        }
+        previousKeysRef.current = nextKeys;
+    }, [items]);
+    useInput((input, key) => {
+        if (items.length === 0)
+            return;
+        if (key.upArrow || input === "k") {
+            setSelectedIndex((current) => {
+                const next = Math.max(0, current - 1);
+                if (next !== current && onHighlight)
+                    onHighlight(items[next]);
+                return next;
+            });
+        }
+        if (key.downArrow || input === "j") {
+            setSelectedIndex((current) => {
+                const next = Math.min(items.length - 1, current + 1);
+                if (next !== current && onHighlight)
+                    onHighlight(items[next]);
+                return next;
+            });
+        }
+        if (key.return) {
+            const item = items[selectedIndex];
+            if (item && onSelect)
+                onSelect(item);
+        }
+    });
+    const maxStart = Math.max(0, items.length - limit);
+    const start = hasLimit
+        ? clamp(selectedIndex - Math.floor(limit / 2), 0, maxStart)
+        : 0;
+    const visible = items.slice(start, start + limit);
+    return (_jsx(Box, { flexDirection: "column", children: visible.map((item, idx) => {
+            const realIndex = start + idx;
+            const isSelected = realIndex === selectedIndex;
+            return (_jsxs(Box, { children: [_jsx(IndicatorComponent, { isSelected: isSelected }), _jsx(ItemComponent, { label: item.label, isSelected: isSelected })] }, item.key ?? String(item.value)));
+        }) }));
 }
 function ConfirmPanel({ title, message, onConfirm, onCancel, }) {
     return (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: title }), _jsx(Text, { color: "white", children: message }), _jsx(Box, { marginTop: 1, children: _jsx(SelectInput, { items: [
@@ -157,6 +217,14 @@ export default function App() {
     const [highlightChecklistId, setHighlightChecklistId] = useState(null);
     const [highlightCheckItem, setHighlightCheckItem] = useState(null);
     const [highlightArchivedCard, setHighlightArchivedCard] = useState(null);
+    // Current position (0-based) of the highlighted row in each scrollable
+    // list, used only to show a live "item X dari Y" hint so it's obvious the
+    // list keeps scrolling instead of being stuck on the first window.
+    const [boardHighlightIndex, setBoardHighlightIndex] = useState(0);
+    const [checklistHighlightIndex, setChecklistHighlightIndex] = useState(0);
+    const [checkItemHighlightIndex, setCheckItemHighlightIndex] = useState(0);
+    const [archivedHighlightIndex, setArchivedHighlightIndex] = useState(0);
+    const [moveHighlightIndex, setMoveHighlightIndex] = useState(0);
     const [confirmState, setConfirmState] = useState(null);
     const flash = (msg, color = "green") => {
         setStatus(msg);
@@ -234,14 +302,28 @@ export default function App() {
     }, [cardsByList, lists]);
     useEffect(() => {
         setHighlightCheckItem(null);
+        setCheckItemHighlightIndex(0);
     }, [selectedChecklist?.id, screen]);
     useEffect(() => {
         if (screen !== "archived_cards") {
             setHighlightArchivedCard(null);
+            setArchivedHighlightIndex(0);
             return;
         }
         setHighlightArchivedCard(archivedCards[0] ?? null);
     }, [archivedCards, screen]);
+    useEffect(() => {
+        if (screen === "boards")
+            setBoardHighlightIndex(0);
+    }, [screen]);
+    useEffect(() => {
+        if (screen === "checklists")
+            setChecklistHighlightIndex(0);
+    }, [screen, checklists]);
+    useEffect(() => {
+        if (screen === "move_card")
+            setMoveHighlightIndex(0);
+    }, [screen]);
     useEffect(() => {
         if (screen !== "view_desc")
             return;
@@ -888,6 +970,16 @@ export default function App() {
     const footerHeight = 2;
     const contentHeight = Math.max(1, height - headerHeight - footerHeight);
     const contentWidth = Math.max(20, width - 12);
+    // Several screens render a scrollable SelectInput list below a title/status
+    // area. ink-select-input renders every item at once unless a `limit` is
+    // given — once a list (e.g. a checklist with many items) is taller than the
+    // terminal, Ink can no longer redraw the screen cleanly and you get exactly
+    // the symptoms reported: lines getting cut off and content appearing to
+    // jump around on every keypress. Capping `limit` to the space actually
+    // available makes these lists scroll automatically instead (Up/Down still
+    // works exactly as before — ink-select-input's own windowing kicks in).
+    const listLimitWithStatus = Math.max(3, contentHeight - 7);
+    const listLimitTitleOnly = Math.max(3, contentHeight - 5);
     const headerTitle = (() => {
         switch (screen) {
             case "boards":
@@ -961,7 +1053,7 @@ export default function App() {
                 ];
             case "checklists":
                 return [
-                    "Up/Down: navigasi",
+                    "Up/Down: navigasi (scroll)",
                     "Enter: pilih",
                     "D: hapus",
                     "Esc: back",
@@ -988,7 +1080,7 @@ export default function App() {
                 return ["Enter: simpan", "Esc: back", "Q: quit"];
             case "add_checkitem":
                 return [
-                    "Up/Down: navigasi",
+                    "Up/Down: navigasi (scroll)",
                     "Enter: pilih",
                     "D: hapus",
                     "Esc: back",
@@ -1012,7 +1104,10 @@ export default function App() {
             value: b,
             key: b.id,
         }));
-        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Boards" }), _jsx(SelectInput, { items: items, onSelect: handleBoardSelect, itemComponent: SelectItem, indicatorComponent: SelectIndicator }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
+        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Boards" }), _jsx(ScrollHint, { position: boardHighlightIndex + 1, total: items.length, limit: listLimitWithStatus }), _jsx(SelectInput, { items: items, limit: listLimitWithStatus, onSelect: handleBoardSelect, onHighlight: (item) => {
+                        const idx = items.findIndex((it) => it.key === item.key);
+                        setBoardHighlightIndex(idx >= 0 ? idx : 0);
+                    }, itemComponent: SelectItem, indicatorComponent: SelectIndicator }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
     }
     else if (screen === "lists") {
         const columnWidth = Math.max(18, Math.floor((contentWidth - 4) / 3));
@@ -1045,7 +1140,7 @@ export default function App() {
         ];
         const listWidth = Math.max(20, Math.floor(contentWidth * 0.45));
         const detailWidth = Math.max(20, contentWidth - listWidth - 2);
-        content = (_jsxs(Box, { flexDirection: "row", children: [_jsxs(Box, { flexDirection: "column", width: listWidth, children: [_jsx(SectionTitle, { label: "Aksi" }), _jsx(SelectInput, { items: actions, onSelect: handleCardAction, itemComponent: SelectItem, indicatorComponent: SelectIndicator }), _jsx(StatusMsg, { msg: status, color: statusColor })] }), _jsx(Box, { flexDirection: "column", width: detailWidth, marginLeft: 2, children: _jsx(CardDetailPanel, { card: selectedCard, width: detailWidth, height: contentHeight }) })] }));
+        content = (_jsxs(Box, { flexDirection: "row", children: [_jsxs(Box, { flexDirection: "column", width: listWidth, children: [_jsx(SectionTitle, { label: "Aksi" }), _jsx(SelectInput, { items: actions, limit: listLimitWithStatus, onSelect: handleCardAction, itemComponent: SelectItem, indicatorComponent: SelectIndicator }), _jsx(StatusMsg, { msg: status, color: statusColor })] }), _jsx(Box, { flexDirection: "column", width: detailWidth, marginLeft: 2, children: _jsx(CardDetailPanel, { card: selectedCard, width: detailWidth, height: contentHeight }) })] }));
     }
     else if (screen === "create_card") {
         content = (_jsx(TextInputPanel, { prompt: `Nama card baru di "${selectedList?.name}":`, onSubmit: handleCreateCard }));
@@ -1088,7 +1183,10 @@ export default function App() {
                 key: l.id,
             })),
         ];
-        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Pilih list tujuan" }), _jsx(SelectInput, { items: items, onSelect: handleMoveCard, itemComponent: SelectItem, indicatorComponent: SelectIndicator })] }));
+        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Pilih list tujuan" }), _jsx(ScrollHint, { position: moveHighlightIndex + 1, total: items.length, limit: listLimitTitleOnly }), _jsx(SelectInput, { items: items, limit: listLimitTitleOnly, onSelect: handleMoveCard, onHighlight: (item) => {
+                        const idx = items.findIndex((it) => it.key === item.key);
+                        setMoveHighlightIndex(idx >= 0 ? idx : 0);
+                    }, itemComponent: SelectItem, indicatorComponent: SelectIndicator })] }));
     }
     else if (screen === "checklists") {
         const items = [
@@ -1107,12 +1205,14 @@ export default function App() {
                 key: "add_checklist",
             },
         ];
-        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Checklists" }), checklists.length === 0 && (_jsx(Text, { color: "white", children: "Belum ada checklist." })), _jsx(SelectInput, { items: items, onSelect: handleChecklistAction, onHighlight: (item) => {
+        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Checklists" }), checklists.length === 0 && (_jsx(Text, { color: "white", children: "Belum ada checklist." })), _jsx(ScrollHint, { position: checklistHighlightIndex + 1, total: items.length, limit: listLimitWithStatus }), _jsx(SelectInput, { items: items, limit: listLimitWithStatus, onSelect: handleChecklistAction, onHighlight: (item) => {
                         const value = item.value;
                         if (typeof value === "string")
                             setHighlightChecklistId(null);
                         else
                             setHighlightChecklistId(value.id);
+                        const idx = items.findIndex((it) => it.key === item.key);
+                        setChecklistHighlightIndex(idx >= 0 ? idx : 0);
                     }, itemComponent: SelectItem, indicatorComponent: SelectIndicator }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
     }
     else if (screen === "add_checklist") {
@@ -1129,12 +1229,14 @@ export default function App() {
         ];
         const total = selectedChecklist.checkItems.length;
         const done = selectedChecklist.checkItems.filter((i) => i.state === "complete").length;
-        content = (_jsxs(Box, { flexDirection: "column", children: [_jsxs(Text, { color: "white", children: [selectedChecklist.name, " [", done, "/", total, "]"] }), _jsx(Text, { color: "white", children: "Pilih item untuk toggle [x]/[ ], atau tambah baru:" }), _jsx(Box, { marginTop: 1, children: _jsx(SelectInput, { items: items, onSelect: handleCheckItemAction, onHighlight: (item) => {
+        content = (_jsxs(Box, { flexDirection: "column", children: [_jsxs(Text, { color: "white", children: [selectedChecklist.name, " [", done, "/", total, "]"] }), _jsx(Text, { color: "white", children: "Pilih item untuk toggle [x]/[ ], atau tambah baru:" }), _jsx(ScrollHint, { position: checkItemHighlightIndex + 1, total: items.length, limit: listLimitWithStatus }), _jsx(Box, { marginTop: 1, children: _jsx(SelectInput, { items: items, limit: listLimitWithStatus, onSelect: handleCheckItemAction, onHighlight: (item) => {
                             const value = item.value;
                             if (value === "add")
                                 setHighlightCheckItem(null);
                             else
                                 setHighlightCheckItem(value);
+                            const idx = items.findIndex((it) => it.key === item.key);
+                            setCheckItemHighlightIndex(idx >= 0 ? idx : 0);
                         }, itemComponent: SelectItem, indicatorComponent: SelectIndicator }) }), _jsx(StatusMsg, { msg: status, color: statusColor })] }));
     }
     else if (screen === "create_checkitem") {
@@ -1149,13 +1251,15 @@ export default function App() {
             value: c,
             key: c.id,
         }));
-        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Arsip Card" }), archivedCards.length === 0 && (_jsx(Text, { color: "white", children: "Tidak ada card terarsip." })), archivedCards.length > 0 && (_jsx(SelectInput, { items: items, onSelect: (item) => {
-                        const card = item.value;
-                        setSelectedCard(card);
-                        setScreen("card_detail");
-                    }, onHighlight: (item) => {
-                        setHighlightArchivedCard(item.value);
-                    }, itemComponent: SelectItem, indicatorComponent: SelectIndicator }))] }));
+        content = (_jsxs(Box, { flexDirection: "column", children: [_jsx(SectionTitle, { label: "Arsip Card" }), archivedCards.length === 0 && (_jsx(Text, { color: "white", children: "Tidak ada card terarsip." })), archivedCards.length > 0 && (_jsxs(_Fragment, { children: [_jsx(ScrollHint, { position: archivedHighlightIndex + 1, total: items.length, limit: listLimitTitleOnly }), _jsx(SelectInput, { items: items, limit: listLimitTitleOnly, onSelect: (item) => {
+                                const card = item.value;
+                                setSelectedCard(card);
+                                setScreen("card_detail");
+                            }, onHighlight: (item) => {
+                                setHighlightArchivedCard(item.value);
+                                const idx = items.findIndex((it) => it.key === item.key);
+                                setArchivedHighlightIndex(idx >= 0 ? idx : 0);
+                            }, itemComponent: SelectItem, indicatorComponent: SelectIndicator })] }))] }));
     }
     else if (screen === "confirm" && confirmState) {
         const titleMap = {
